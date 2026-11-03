@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ready:
+    name: check, test, build (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Lowest supported (package.json engines) and current LTS.
+        node: ["22.18", "24"]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: voidzero-dev/setup-vp@v1.21.2
+        with:
+          node-version: ${{ matrix.node }}
+          cache: true
+      - run: vp run ready
+      - name: Smoke-test the built binary
+        run: |
+          node packages/cli/dist/bin.mjs --version
+          node packages/cli/dist/bin.mjs --help
