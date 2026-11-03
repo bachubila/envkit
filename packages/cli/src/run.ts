@@ -1,29 +1,24 @@
 import { isEnvkitError } from "@envkit/core";
 import { renderUsage, runCommand, type CommandDef, type CommandMeta } from "citty";
+import { createContext, withContext, type CliContext } from "./context.ts";
 import { main } from "./main.ts";
-
-export interface Output {
-  stdout(text: string): void;
-  stderr(text: string): void;
-}
-
-const processOutput: Output = {
-  stdout: (text) => process.stdout.write(`${text}\n`),
-  stderr: (text) => process.stderr.write(`${text}\n`),
-};
 
 /**
  * Runs the CLI and resolves to the process exit code. Unlike citty's `runMain`
- * it never calls `process.exit`, so tests can drive it in-process.
+ * it never calls `process.exit`, so tests can drive it in-process and replace
+ * any part of the context.
  */
 export async function run(
   rawArgs: string[],
-  output: Output = processOutput,
+  overrides: Partial<CliContext> = {},
   command: CommandDef = main,
 ): Promise<number> {
+  const context = createContext(overrides);
+  const { output } = context;
   try {
-    if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
-      output.stdout(await renderUsage(command));
+    if (rawArgs.length === 0 || rawArgs.includes("--help") || rawArgs.includes("-h")) {
+      const [target, parent] = await resolveSubCommand(command, rawArgs);
+      output.stdout(await renderUsage(target, parent));
       return 0;
     }
     if (rawArgs.length === 1 && (rawArgs[0] === "--version" || rawArgs[0] === "-v")) {
@@ -31,8 +26,7 @@ export async function run(
       output.stdout(meta?.version ?? "unknown");
       return 0;
     }
-    const { result } = await runCommand(command, { rawArgs });
-    if (isUsageRequest(result)) output.stdout(await renderUsage(command));
+    await withContext(context, () => runCommand(command, { rawArgs }));
     return 0;
   } catch (error) {
     if (isEnvkitError(error)) {
@@ -51,8 +45,18 @@ export async function run(
   }
 }
 
-function isUsageRequest(result: unknown): boolean {
-  return typeof result === "object" && result !== null && "showUsage" in result;
+/** The (sub)command `rawArgs` points at, and its parent, for `--help`. */
+async function resolveSubCommand(
+  command: CommandDef,
+  rawArgs: string[],
+  parent?: CommandDef,
+): Promise<[CommandDef, CommandDef | undefined]> {
+  const subCommands = (await resolve(command.subCommands)) ?? {};
+  const index = rawArgs.findIndex((arg) => !arg.startsWith("-"));
+  const name = index === -1 ? undefined : rawArgs[index];
+  const sub = name === undefined ? undefined : subCommands[name];
+  if (!sub) return [command, parent];
+  return resolveSubCommand(await resolve(sub), rawArgs.slice(index + 1), command);
 }
 
 async function resolve<T>(value: T | Promise<T> | (() => T | Promise<T>)): Promise<T> {

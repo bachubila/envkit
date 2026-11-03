@@ -1,6 +1,10 @@
-import { EnvkitError } from "@envkit/core";
 import { defineCommand } from "citty";
 import pkg from "../package.json" with { type: "json" };
+import { lock } from "./commands/lock.ts";
+import { login } from "./commands/login.ts";
+import { logout } from "./commands/logout.ts";
+import { status } from "./commands/status.ts";
+import { unlock } from "./commands/unlock.ts";
 
 export const main = defineCommand({
   meta: {
@@ -8,16 +12,5 @@ export const main = defineCommand({
     version: pkg.version,
     description: "Share environment variables with your team through a self-hosted Vaultwarden.",
   },
-  // Phase 0 has no subcommands yet. Once `subCommands` is populated, drop this
-  // `run`: citty runs the parent's `run` after a subcommand and reports unknown
-  // commands itself.
-  run({ args }) {
-    const [command] = args._;
-    if (command !== undefined) {
-      throw new EnvkitError(`Unknown command "${command}"`, {
-        hint: "Run `envkit --help` to see the available commands.",
-      });
-    }
-    return { showUsage: true };
-  },
+  subCommands: { login, logout, unlock, lock, status },
 });

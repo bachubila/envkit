@@ -1,0 +1,22 @@
+{
+  "name": "@envkit/testkit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Test helpers for envkit: a fake `bw`, a disposable Vaultwarden, and account registration.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "vp check"
+  },
+  "dependencies": {
+    "@envkit/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@bitwarden/cli": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

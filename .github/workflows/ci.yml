@@ -28,3 +28,14 @@ jobs:
         run: |
           node packages/cli/dist/bin.mjs --version
           node packages/cli/dist/bin.mjs --help
+
+  integration:
+    name: integration (bw + Vaultwarden in Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: voidzero-dev/setup-vp@v1.21.2
+        with:
+          node-version: "24"
+          cache: true
+      - run: vp run test:integration

@@ -32,6 +32,8 @@ Access control per environment (e.g. only some people can read prod) works by sp
 packages/
   core/     # backend interface, bw backend, config, env resolution (library, no CLI deps)
   cli/      # `envkit` binary: argument parsing, prompts, output
+tools/
+  testkit/  # private: fake `bw`, in-memory FakeVault, disposable Vaultwarden, integration tests
 apps/
   website/  # existing starter, later becomes the docs site (Phase 7)
 ```
@@ -59,21 +61,37 @@ Notes for later phases:
 
 **Done when:** `vp run ready` passes and `envkit --help` prints the command list.
 
-## Phase 1 — Vault backend and auth
+## Phase 1 — Vault backend and auth ✅
 
 **Goal:** log in to a Vaultwarden server and unlock the vault from envkit.
 
-- [ ] Define the `VaultBackend` interface in `core`: `status`, `login`, `unlock`, `lock`, `listOrgs`, `listCollections`, `getItem`, `createItem`, `updateItem`, `sync`.
-- [ ] `BwCliBackend`: wraps `bw` with `--raw` / `--response` JSON output, passes the session through the `BW_SESSION` env var (never as an argument) and gives clear errors.
-- [ ] Detect `bw`: if it's missing or too old, print install instructions.
-- [ ] `envkit login [--server <url>]`: runs `bw config server`, then `bw login`. Supports interactive login and API-key login (`BW_CLIENTID` / `BW_CLIENTSECRET`).
-- [ ] `envkit unlock` / `envkit lock`: cache the session token.
-  - Store it in the OS keychain where available (`@napi-rs/keyring` or similar). Otherwise keep it in memory only and prompt every time.
-  - Configurable timeout; by default the session expires with the shell or after N minutes.
-- [ ] `envkit status`: server URL, logged-in email, locked/unlocked state.
-- [ ] Tests: unit-test the backend against a fake `bw` executable (fixture JSON responses).
+- [x] `VaultBackend` interface in `core`: `status`, `setServer`, `login`, `loginWithApiKey`, `unlock`, `lock`, `logout`, `sync`, `listOrganizations`, `listCollections`, `getItem`, `createItem`, `updateItem`.
+- [x] `BwCliBackend`: every call is `bw … --response` (structured JSON, including the session key in `data.raw`). Passwords go through `--passwordenv`, sessions through `BW_SESSION`, item payloads through stdin, so no secret ever appears in argv. `bw` errors are translated into actionable messages with hints.
+- [x] Detect `bw`: a missing binary or one older than `MIN_BW_VERSION` (2026.1.0) gives install instructions. `ENVKIT_BW_PATH` overrides the path.
+- [x] `envkit login [--server <url>] [--email <email>] [--apikey]`: envkit asks for the URL, email and password itself. `bw` still prompts on the terminal for 2FA or new-device codes. API-key login uses `BW_CLIENTID` / `BW_CLIENTSECRET` and then unlocks.
+- [x] `envkit unlock` / `envkit lock`, plus `envkit logout` (not in the original plan, but needed to switch accounts).
+  - The session is kept in the OS keychain (`@napi-rs/keyring`). Without a working keychain it stays in memory, so every command asks for the password.
+  - Idle timeout of 60 minutes (`ENVKIT_SESSION_IDLE_MINUTES`). Every use resets it; `status` doesn't.
+  - Up to three attempts for a mistyped password.
+- [x] `envkit status [--json]`: server, account, locked/unlocked, when it locks, last sync, where sessions are stored.
+- [x] Tests:
+  - `core`: `BwCliBackend` against a fake `bw` executable (args, env, stdin, error mapping, version check).
+  - `cli`: every command in-process against `FakeVault`, an in-memory backend that follows `bw`'s rules.
+  - Integration (`vp run test:integration`, own CI job): real `bw` 2026.10.0 against Vaultwarden 1.37.5 in Docker, including a login in one process that the next process sees.
 
-**Done when:** a user can log in to a local Vaultwarden (docker) and `envkit status` shows the vault unlocked.
+**Done when:** a user can log in to a local Vaultwarden (docker) and `envkit status` shows the vault unlocked. ✅ Covered by the integration tests.
+
+What we learned (and what later phases need to know):
+
+- **envkit uses its own `bw` data dir** (`$ENVKIT_HOME/bw`, default `~/.config/envkit/bw` on Linux). This keeps it separate from the user's personal `bw` login and server, so the user's own `BW_SESSION` is never passed to envkit's `bw`.
+- **`bw` refuses non-HTTPS servers, even `localhost`.** `normalizeServerUrl` rejects `http://` up front. Self-signed servers need `NODE_EXTRA_CA_CERTS` pointing at their CA.
+- **Every `unlock` invalidates earlier session keys**, and so does `bw lock`. envkit checks a cached session with `bw status` before using it and drops it if it's dead.
+- **`bw sync` works while the vault is locked.** It only needs the login token. Reading data needs the session.
+- **Item updates re-read the full item**, because `bw edit` replaces the whole item. Fields envkit doesn't own are kept.
+- **Vaultwarden 1.37 removed the legacy `/identity/accounts/register` route.** The test kit registers accounts through `register/send-verification-email` + `register/finish`, doing the client-side crypto itself. `bw` can't create organizations either, so **Phase 2 needs a similar test helper to create an org and collections**.
+- `bw` calls are slow (about 1–3 s each because of Node startup and KDF), and `requireSession` costs two of them before any real work. If this becomes painful, cache the status per run or move to the native backend (Phase 7).
+- **Env vars added:** `ENVKIT_HOME`, `ENVKIT_BW_PATH`, `ENVKIT_SERVER`, `ENVKIT_EMAIL`, `ENVKIT_PASSWORD`, `ENVKIT_SESSION`, `ENVKIT_SESSION_IDLE_MINUTES` (plus `BW_CLIENTID` / `BW_CLIENTSECRET`). Phase 5 builds on these.
+- **Not verified yet:** the interactive prompts in a real terminal (`@clack/prompts`), `bw`'s 2FA prompts, and the macOS and Windows keychains. Check them by hand before release (Phase 6).
 
 ## Phase 2 — Project linking
 
@@ -143,7 +161,8 @@ Notes for later phases:
 
 - [ ] Security review: process args (no secrets in argv), temp files, file permissions on any cache, session-token lifetime, error messages that might leak values.
 - [ ] `envkit doctor`: checks `bw` version, server reachability, login state, config validity and `.gitignore` coverage.
-- [ ] Integration tests against Vaultwarden in docker (`vaultwarden/server`), run in CI.
+- [x] Integration tests against Vaultwarden in docker (`vaultwarden/server`), run in CI. Done in Phase 1 (`tools/testkit`). Extend them as each phase adds commands.
+- [ ] Manual check of interactive prompts, 2FA and the macOS/Windows keychains (see Phase 1 notes).
 - [ ] Publish to npm (`npx envkit`, `pnpm dlx envkit`). Consider single-file binaries later.
 - [ ] Docs: README quickstart, command reference, team setup guide (org, collections, roles).
 - [ ] Versioning and changelog (changesets or similar).
@@ -162,8 +181,8 @@ Notes for later phases:
 
 ## Open questions
 
-1. **Minimum `bw` version and Vaultwarden version** we support. Pin and test both.
-2. **Session storage:** is the OS keychain a hard requirement, or is "prompt every time" an acceptable fallback on Linux without a keyring?
+1. **Minimum `bw` version and Vaultwarden version** we support. Tests currently pin `bw` 2026.10.0 and Vaultwarden 1.37.5; `MIN_BW_VERSION` is 2026.1.0 but untested below 2026.10.0. Add a version matrix to the integration job or raise the minimum.
+2. **Session storage:** Phase 1 uses the OS keychain and falls back to "prompt every time" when there is none. Confirm that fallback is acceptable, or add an opt-in encrypted file store.
 3. **Environment layout default:** one collection per project (simpler) or one per environment (finer access control)?
 4. ~~**Package name:**~~ Resolved: `envkit` is free on npm (checked 2026-11-03). The library is `@envkit/core`, so we need to claim the `@envkit` npm scope before publishing.
 5. **License.**

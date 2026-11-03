@@ -28,6 +28,6 @@ describe("envkit binary", () => {
   test("unknown command sets a non-zero exit code", () => {
     const result = envkit("nope");
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('Unknown command "nope"');
+    expect(result.stderr).toContain("Unknown command nope");
   });
 });

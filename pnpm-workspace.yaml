@@ -6,6 +6,9 @@ packages:
 catalogMode: prefer
 
 catalog:
+  "@bitwarden/cli": 2026.10.0
+  "@clack/prompts": 1.8.1
+  "@napi-rs/keyring": 2.1.1
   "@types/node": ^24
   citty: ^0.2.2
   typescript: ^7.0.2
@@ -18,3 +21,7 @@ peerDependencyRules:
     - vite
   allowedVersions:
     vite: "*"
+
+allowBuilds:
+  # Postinstall only prints a funding banner.
+  core-js: false

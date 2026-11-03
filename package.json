@@ -6,7 +6,8 @@
   "scripts": {
     "ready": "vp check && vp run -r test && vp run -r build",
     "dev": "vp run website#dev",
-    "envkit": "node --conditions=source packages/cli/src/bin.ts"
+    "envkit": "node --conditions=source packages/cli/src/bin.ts",
+    "test:integration": "vp run @envkit/testkit#integration"
   },
   "devDependencies": {
     "vite-plus": "catalog:"
