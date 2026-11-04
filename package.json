@@ -7,6 +7,7 @@
     "ready": "vp check && vp run -r test && vp run -r build",
     "dev": "vp run website#dev",
     "envkit": "node --conditions=source packages/cli/src/bin.ts",
+    "sandbox": "node --conditions=source tools/testkit/scripts/sandbox.ts",
     "test:integration": "vp run @envkit/testkit#integration"
   },
   "devDependencies": {
