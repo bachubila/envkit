@@ -1,5 +1,6 @@
+import dotenv from "dotenv";
 import { EnvkitError } from "./errors.ts";
-import { FieldType, type VaultItem } from "./vault/backend.ts";
+import { FieldType, type VaultField, type VaultItem } from "./vault/backend.ts";
 import type { Env } from "./paths.ts";
 
 const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -102,4 +103,74 @@ export function dotenvQuote(name: string, value: string): string {
   throw new EnvkitError(`${name}'s value can't be written to a .env file exactly`, {
     hint: "It mixes quote characters with line breaks. Use `--format json` or `--format shell`, or `envkit run`.",
   });
+}
+
+/**
+ * Parses .env text the way dotenv does (the same rules `pull` writes for).
+ * Invalid names are reported, not silently dropped.
+ */
+export function parseDotenv(text: string): ReadVariablesResult {
+  const parsed = dotenv.parse(text);
+  const variables = new Map<string, string>();
+  const warnings: string[] = [];
+  for (const [name, value] of Object.entries(parsed)) {
+    if (isValidVariableName(name)) variables.set(name, value);
+    else warnings.push(`skipping "${name}": not a valid variable name`);
+  }
+  return { variables, warnings };
+}
+
+export interface VariableChanges {
+  added: string[];
+  changed: string[];
+  removed: string[];
+  unchanged: string[];
+}
+
+/** Names that differ between two sets of variables, each list sorted. */
+export function diffVariables(
+  before: Map<string, string>,
+  after: Map<string, string>,
+): VariableChanges {
+  const changes: VariableChanges = { added: [], changed: [], removed: [], unchanged: [] };
+  for (const [name, value] of after) {
+    if (!before.has(name)) changes.added.push(name);
+    else if (before.get(name) === value) changes.unchanged.push(name);
+    else changes.changed.push(name);
+  }
+  for (const name of before.keys()) if (!after.has(name)) changes.removed.push(name);
+  for (const list of Object.values(changes)) list.sort();
+  return changes;
+}
+
+/**
+ * Applies variable changes to an item's fields, keeping everything envkit
+ * doesn't manage (invalid names, linked fields) and the existing order. A set
+ * replaces every field of that name with one, at the first one's position.
+ */
+export function applyVariableChanges(
+  fields: VaultField[],
+  changes: { set?: Map<string, string>; unset?: Iterable<string> },
+): VaultField[] {
+  const set = changes.set ?? new Map<string, string>();
+  const unset = new Set(changes.unset);
+  const done = new Set<string>();
+  const result: VaultField[] = [];
+  for (const field of fields) {
+    const name = field.name?.trim() ?? "";
+    if (unset.has(name)) continue;
+    if (!set.has(name)) {
+      result.push(field);
+      continue;
+    }
+    if (done.has(name)) continue;
+    done.add(name);
+    // Keep visible text fields visible; everything else becomes hidden.
+    const type = field.type === FieldType.Text ? FieldType.Text : FieldType.Hidden;
+    result.push({ name, value: set.get(name)!, type });
+  }
+  for (const [name, value] of set) {
+    if (!done.has(name)) result.push({ name, value, type: FieldType.Hidden });
+  }
+  return result;
 }

@@ -5,40 +5,41 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { BwCliBackend, MemorySessionStore, SessionManager } from "@envkit/core";
 import { run } from "../../../packages/cli/src/run.ts";
-import {
-  startVaultwarden,
-  VaultwardenApi,
-  type TestAccount,
-  type Vaultwarden,
-} from "../src/index.ts";
+import { randomUUID } from "node:crypto";
+import { inject } from "vite-plus/test";
+import { VaultwardenApi, type TestAccount } from "../src/index.ts";
 
 /** The `bw` from this package's devDependencies, so tests pin the version they run against. */
 export const BW_PATH = fileURLToPath(new URL("../node_modules/.bin/bw", import.meta.url));
 const BIN = fileURLToPath(new URL("../../../packages/cli/src/bin.ts", import.meta.url));
 
 export interface TestServer {
-  vaultwarden: Vaultwarden;
+  /** The Vaultwarden started once per run by global-setup.ts. */
+  vaultwarden: { url: string; caCertPath: string };
   api: VaultwardenApi;
   /** A registered account without any organization. */
   account: TestAccount;
+  /** Registers another account. Emails are unique per call, since the server is shared. */
+  register(name: string, password?: string): Promise<TestAccount>;
   /** Env for anything that runs `bw` against the self-signed server. */
   env: Record<string, string | undefined>;
   tempHome(): Promise<string>;
+  /** Removes this file's temp dirs; the server itself outlives it. */
   stop(): Promise<void>;
 }
 
 export async function startTestServer(): Promise<TestServer> {
-  const vaultwarden = await startVaultwarden();
+  const vaultwarden = inject("vaultwarden");
   const api = new VaultwardenApi(vaultwarden.url, await readFile(vaultwarden.caCertPath, "utf8"));
-  const account = await api.registerAccount({
-    email: "alice@example.test",
-    password: "correct horse battery staple",
-  });
+  const register = (name: string, password = `${name}'s password`) =>
+    api.registerAccount({ email: `${name}-${randomUUID().slice(0, 8)}@example.test`, password });
+  const account = await register("alice", "correct horse battery staple");
   const homes: string[] = [];
   return {
     vaultwarden,
     api,
     account,
+    register,
     env: {
       PATH: process.env.PATH,
       HOME: process.env.HOME,
@@ -50,7 +51,6 @@ export async function startTestServer(): Promise<TestServer> {
       return home;
     },
     async stop() {
-      await vaultwarden.stop();
       await Promise.all(homes.map((home) => rm(home, { recursive: true, force: true })));
     },
   };

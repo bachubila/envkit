@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import pkg from "../package.json" with { type: "json" };
+import { diff } from "./commands/diff.ts";
 import { env } from "./commands/env.ts";
 import { get } from "./commands/get.ts";
 import { init } from "./commands/init.ts";
@@ -9,7 +10,9 @@ import { lock } from "./commands/lock.ts";
 import { login } from "./commands/login.ts";
 import { logout } from "./commands/logout.ts";
 import { pull } from "./commands/pull.ts";
+import { push } from "./commands/push.ts";
 import { runCommand } from "./commands/run.ts";
+import { set, unset } from "./commands/set.ts";
 import { status } from "./commands/status.ts";
 import { sync } from "./commands/sync.ts";
 import { unlock } from "./commands/unlock.ts";
@@ -25,6 +28,10 @@ export const main = defineCommand({
     pull,
     get,
     list,
+    set,
+    unset,
+    push,
+    diff,
     init,
     link,
     env,

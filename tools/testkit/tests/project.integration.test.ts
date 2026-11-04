@@ -11,7 +11,7 @@ let acme: TestOrganization;
 
 beforeAll(async () => {
   server = await startTestServer();
-  bob = await server.api.registerAccount({ email: "bob@example.test", password: "bob's password" });
+  bob = await server.register("bob");
   acme = await server.api.createOrganization(server.account, "Acme");
 });
 

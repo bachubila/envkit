@@ -1,5 +1,7 @@
 import {
+  BwError,
   canCreateCollections,
+  CONFLICT_MESSAGE,
   toError,
   type ApiKeyLoginOptions,
   type Collection,
@@ -38,6 +40,7 @@ export class FakeVault implements VaultBackend {
   #session: string | undefined;
   #sessionCounter = 0;
   #itemCounter = 0;
+  #revisionCounter = 0;
 
   constructor(accounts: FakeAccount[] = []) {
     this.accounts = accounts;
@@ -173,7 +176,7 @@ export class FakeVault implements VaultBackend {
     const created = {
       ...structuredClone(item),
       id: `item-${++this.#itemCounter}`,
-      revisionDate: now(),
+      revisionDate: this.#nextRevision(),
     };
     this.items.set(created.id, created);
     return structuredClone(created);
@@ -181,8 +184,13 @@ export class FakeVault implements VaultBackend {
 
   async updateItem(session: string, item: VaultItem): Promise<VaultItem> {
     this.#requireSession(session);
-    if (!this.items.has(item.id)) throw toError("Not found.");
-    const updated = { ...structuredClone(item), revisionDate: now() };
+    const current = this.items.get(item.id);
+    if (!current) throw toError("Not found.");
+    this.calls.push(`updateItem ${item.name}`);
+    if (current.revisionDate !== item.revisionDate) {
+      throw new BwError("conflict", CONFLICT_MESSAGE, "Run the command again.");
+    }
+    const updated = { ...structuredClone(item), revisionDate: this.#nextRevision() };
     this.items.set(item.id, updated);
     return structuredClone(updated);
   }
@@ -191,6 +199,19 @@ export class FakeVault implements VaultBackend {
     this.#requireSession(session);
     this.calls.push(`deleteItem ${id}`);
     if (!this.items.delete(id)) throw toError("Not found.");
+  }
+
+  /** Test helper: an edit by someone else, as seen after a sync. */
+  editElsewhere(id: string, edit: (item: VaultItem) => void): void {
+    const item = this.items.get(id);
+    if (!item) throw new Error(`FakeVault: no item ${id}`);
+    edit(item);
+    item.revisionDate = this.#nextRevision();
+  }
+
+  // Strictly increasing, unlike Date.now(), which repeats within a millisecond.
+  #nextRevision(): string {
+    return new Date(Date.UTC(2026, 0, 1) + ++this.#revisionCounter * 1000).toISOString();
   }
 
   #find(email: string): FakeAccount {
@@ -212,8 +233,4 @@ export class FakeVault implements VaultBackend {
     if (!this.account) throw toError("You are not logged in.");
     if (!this.#isValid(session)) throw toError("Vault is locked.");
   }
-}
-
-function now(): string {
-  return new Date().toISOString();
 }

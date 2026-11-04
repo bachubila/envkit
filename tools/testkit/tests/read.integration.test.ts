@@ -39,10 +39,7 @@ describe("reading variables from Vaultwarden", () => {
     config = JSON.parse(await readFile(join(alice.cwd, CONFIG_FILE), "utf8"));
     await setVariables({ API_KEY: "s3cret from the vault", MULTI: "line 1\nline 2" });
 
-    const bobAccount = await server.api.registerAccount({
-      email: "bob@example.test",
-      password: "bob's password",
-    });
+    const bobAccount = await server.register("bob");
     await server.api.addMember(server.account, acme, bobAccount, {
       collectionIds: [config.environments.dev!.collectionId],
     });

@@ -35,6 +35,10 @@ export function scriptedPrompts(answers: string[] = []) {
       if (!option) throw new Error(`no option "${label}" for prompt: ${message}`);
       return option.value;
     },
+    // Answer "yes" or "no".
+    async confirm(message: string) {
+      return (await next(message)) === "yes";
+    },
   };
   return { prompt, asked, remaining: () => queue.length };
 }
@@ -61,6 +65,7 @@ export function harness(
   const prompts = scriptedPrompts(options.answers);
   let out: string[] = [];
   let err: string[] = [];
+  let stdin: string | undefined;
 
   const context: Partial<CliContext> = {
     output: { stdout: (text) => out.push(text), stderr: (text) => err.push(text) },
@@ -68,6 +73,7 @@ export function harness(
     cwd,
     interactive: options.interactive ?? false,
     prompt: prompts.prompt,
+    readStdin: async () => stdin,
     backend: () => vault,
     sessions: async () => sessions,
   };
@@ -77,10 +83,15 @@ export function harness(
     sessions,
     cwd,
     prompts,
+    /** Pipes `text` into stdin for the next envkit call only. */
+    pipe: (text: string) => {
+      stdin = text;
+    },
     envkit: async (...args: string[]) => {
       out = [];
       err = [];
       const code = await run(args, context);
+      stdin = undefined;
       return { code, stdout: out.join("\n"), stderr: err.join("\n") };
     },
   };

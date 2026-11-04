@@ -194,6 +194,9 @@ export class BwCliBackend implements VaultBackend {
     // `bw edit` replaces the whole item, so start from the full stored item and
     // overwrite only the fields envkit owns.
     const current = await this.#call<RawItem>(["get", "item", item.id], { session });
+    // The server rejects edits based on a stale local copy, but not edits whose
+    // contents were read before a sync. Compare against what the caller read.
+    if (current.revisionDate !== item.revisionDate) throw conflictError();
     const payload = { ...current, name: item.name, notes: item.notes, fields: item.fields };
     return toVaultItem(
       await this.#call<RawItem>(["edit", "item", item.id], { session, input: encode(payload) }),
@@ -293,17 +296,33 @@ export function toError(bwMessage: string, detail?: string): BwError {
     [/decryption operation failed|Invalid master password/i, "Incorrect master password"],
     [/^Not found/, "Item not found in the vault"],
     [
+      /^You do not have permission to edit this item/,
+      "You can only read this environment",
+      "Ask an organization admin for edit access to its collection.",
+    ],
+    [
       /^Logout required before server config update/,
       "Cannot change server while logged in",
       "Run `envkit logout` first.",
     ],
     [/Insecure URL not allowed/, "The vault URL must use https://"],
   ];
+  if (/client copy of this cipher is out of date/i.test(bwMessage)) return conflictError();
   for (const [pattern, message, hint] of known) {
     const match = pattern.exec(bwMessage);
     if (match) return new BwError(bwMessage, message.replace("$1", match[1] ?? ""), hint);
   }
   return new BwError(bwMessage, `bw: ${bwMessage}`, detail);
+}
+
+export const CONFLICT_MESSAGE = "This environment changed since envkit read it";
+
+function conflictError(): BwError {
+  return new BwError(
+    "conflict",
+    CONFLICT_MESSAGE,
+    "Someone else saved it in the meantime. Run the command again to apply your change on top of theirs.",
+  );
 }
 
 export function compareVersions(a: string, b: string): number {

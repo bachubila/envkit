@@ -9,6 +9,7 @@ export default defineConfig({
   },
   test: {
     include: ["tests/**/*.test.ts"],
+    globalSetup: ["tests/global-setup.ts"],
     // Each test drives real `bw` processes, and KDF + RSA key generation is slow.
     testTimeout: 120_000,
     hookTimeout: 180_000,

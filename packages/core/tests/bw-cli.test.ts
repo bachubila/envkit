@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 import { createFakeBw, type FakeBw } from "../../../tools/testkit/src/fake-bw.ts";
-import { BwCliBackend, BwError, compareVersions, EnvkitError, FieldType } from "../src/index.ts";
+import {
+  BwCliBackend,
+  BwError,
+  compareVersions,
+  CONFLICT_MESSAGE,
+  EnvkitError,
+  FieldType,
+} from "../src/index.ts";
 
 let bw: FakeBw;
 let backend: BwCliBackend;
@@ -252,6 +259,26 @@ describe("BwCliBackend", () => {
     expect((await bw.calls()).at(-1)?.args.slice(0, 3)).toEqual(["delete", "item", "i1"]);
   });
 
+  test("updateItem refuses when the item changed since it was read", async () => {
+    await bw.respond("get item i1", ok({ ...rawItem, revisionDate: "2026-11-04T09:00:00.000Z" }));
+    const error = await backend
+      .updateItem("s", {
+        ...(await backend.getItem("s", "i1")),
+        revisionDate: rawItem.revisionDate,
+      })
+      .catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ message: CONFLICT_MESSAGE });
+    expect((await bw.calls()).some((call) => call.args[0] === "edit")).toBe(false);
+  });
+
+  test("the server's stale-copy error maps to the same conflict", async () => {
+    await bw.respond(
+      "sync",
+      fail("The client copy of this cipher is out of date. Resync the client and try again."),
+    );
+    await expect(backend.sync("s")).rejects.toMatchObject({ message: CONFLICT_MESSAGE });
+  });
+
   test("logout when already logged out succeeds", async () => {
     await bw.respond("logout", fail("You are not logged in."));
     await expect(backend.logout()).resolves.toBeUndefined();
@@ -272,6 +299,11 @@ describe("BwCliBackend", () => {
     ],
     ["Cryptography error, The decryption operation failed", "Incorrect master password", undefined],
     ["Not found.", "Item not found in the vault", undefined],
+    [
+      "You do not have permission to edit this item",
+      "You can only read this environment",
+      "Ask an organization admin for edit access to its collection.",
+    ],
     ["Something new", "bw: Something new", undefined],
   ])("maps bw error %j", async (bwMessage, message, hint) => {
     await bw.respond("sync", fail(bwMessage));

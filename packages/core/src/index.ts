@@ -41,6 +41,7 @@ export {
   BwCliBackend,
   BwError,
   compareVersions,
+  CONFLICT_MESSAGE,
   MIN_BW_VERSION,
   toError,
   type BwCliOptions,
@@ -60,14 +61,18 @@ export {
 } from "./session/store.ts";
 export { DEFAULT_SYNC_INTERVAL_MINUTES, needsSync, syncIntervalFromEnv } from "./sync.ts";
 export {
+  applyVariableChanges,
   buildChildEnv,
+  diffVariables,
   dotenvQuote,
   formatVariables,
   isValidVariableName,
   OUTPUT_FORMATS,
+  parseDotenv,
   PRIVATE_ENV,
   readVariables,
   shellQuote,
   type OutputFormat,
   type ReadVariablesResult,
+  type VariableChanges,
 } from "./variables.ts";

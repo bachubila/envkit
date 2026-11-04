@@ -138,17 +138,26 @@ What we learned (and what later phases need to know):
 - **The integration suite now takes about 10 minutes** (4 files, each starting its own Vaultwarden, plus slow `bw` calls). Before it grows further, share one server per run through a Vitest `globalSetup`.
 - **Not done:** Windows support in `run` (`.cmd` shims need `shell: true` or cross-spawn), and loading a `.env` file _and_ the vault together.
 
-## Phase 4 — Writing secrets
+## Phase 4 — Writing secrets ✅
 
 **Goal:** manage variables without opening the Bitwarden UI.
 
-- [ ] `envkit set KEY=value [KEY2=value2…] [--env <name>]`: reads the value from stdin when it's omitted, so secrets stay out of shell history.
-- [ ] `envkit unset KEY…`.
-- [ ] `envkit push [--from .env]`: bulk import that shows a diff and asks for confirmation.
-- [ ] `envkit diff --env dev --env prod`: compares keys only, to catch missing variables.
-- [ ] Concurrency: re-fetch before every write and refuse to save if the item's `revisionDate` changed since the read.
+- [x] `envkit set KEY=value [KEY2=value2…] [-e <env>]`: a single bare `KEY` reads the value from stdin (one trailing newline stripped) or from a hidden prompt, so secrets stay out of shell history. Invalid names are refused before anything is written. Prints e.g. `Added PORT; updated API_KEY in "dev".`
+- [x] `envkit unset KEY…`: warns about keys that aren't set instead of failing.
+- [x] `envkit push [--from .env|-] [-e] [--prune] [--yes]`: bulk import parsed with the `dotenv` package. It previews keys only (`+ NEW`, `~ CHANGED`, `- REMOVED`, `(n unchanged)`) and asks for confirmation. Without a terminal it needs `--yes`. Keys missing from the file are kept unless `--prune` is given.
+- [x] `envkit diff <a> [b] [--check]`: compares keys and reports which values differ, never the values themselves. With one name it compares the default environment with it. `--check` exits 1 when a key is missing on either side (for CI).
+- [x] **Concurrency (decided):** every write syncs first, whatever the sync interval. Just before saving, `updateItem` fetches the item again and refuses with "This environment changed since envkit read it" if `revisionDate` moved. Vaultwarden's own stale-copy rejection maps to the same error, so a race inside that window is caught too. Nothing is merged automatically; running the command again applies the change on top.
+- [x] Writes keep fields envkit doesn't manage (linked fields, invalid names), collapse duplicate names into the first one, keep text fields as text and store new variables as hidden fields.
 
-**Done when:** one user's `set` shows up in another user's `run` after a sync.
+**Done when:** one user's `set` shows up in another user's `run` after a sync. ✅ In the integration test, Bob `set`s a value and Alice's real `envkit run` prints it after `envkit sync`. It also covers sync-before-write (no lost updates between two writers), `unset`, `push` plus `diff --check`, and a read-only member's failed `set`.
+
+What we learned (and what later phases need to know):
+
+- **Vaultwarden rejects stale writes** with "The client copy of this cipher is out of date…". The revisionDate check is still worth having: it gives a clearer error and catches changes without a round trip that fails.
+- **Read-only members** get "You do not have permission to edit this item" from the server. Unlike the collection-create 401, `bw` stays logged in. envkit maps it to "You can only read this environment" with a hint to ask an admin.
+- **A member's local copy stays stale until a sync.** Newly granted access, or a teammate's write, is invisible for up to `ENVKIT_SYNC_INTERVAL_MINUTES`. Writes sync anyway; for reads, `envkit sync` is the answer and the hint on "not found" errors says so.
+- **The integration suite shares one Vaultwarden** through Vitest `globalSetup` (`project.provide`/`inject`). It still takes about 15 minutes for 5 files because `bw` process startup dominates. Phase 5's CI job should run it on main and nightly rather than on every push, or Phase 7's native backend should replace `bw` in the hot paths.
+- **Not done:** renaming variables, and `push` from formats other than dotenv.
 
 ## Phase 5 — CI / non-interactive use
 

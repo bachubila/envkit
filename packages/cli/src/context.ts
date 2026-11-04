@@ -27,6 +27,7 @@ export interface Prompter {
   text(message: string, options?: { placeholder?: string; initialValue?: string }): Promise<string>;
   password(message: string): Promise<string>;
   select<T>(message: string, options: SelectOption<T>[]): Promise<T>;
+  confirm(message: string): Promise<boolean>;
 }
 
 /** Everything a command needs from the outside world; tests replace any of it. */
@@ -35,6 +36,8 @@ export interface CliContext {
   env: Env;
   /** Directory commands treat as the project directory. */
   cwd: string;
+  /** Everything piped into envkit's stdin, or undefined when stdin is a terminal. */
+  readStdin(): Promise<string | undefined>;
   /** Whether envkit may prompt. False in CI and when stdin/stdout aren't terminals. */
   interactive: boolean;
   prompt: Prompter;
@@ -81,7 +84,17 @@ export const clackPrompter: Prompter = {
     });
     return unwrap(value) as T;
   },
+  async confirm(message) {
+    return unwrap(await clack.confirm({ message, initialValue: false }));
+  },
 };
+
+async function readProcessStdin(): Promise<string | undefined> {
+  if (process.stdin.isTTY) return undefined;
+  let text = "";
+  for await (const chunk of process.stdin.setEncoding("utf8")) text += chunk as string;
+  return text;
+}
 
 function unwrap<T>(value: T): Exclude<T, symbol> {
   if (clack.isCancel(value)) throw new EnvkitError("Cancelled", { exitCode: 130 });
@@ -98,6 +111,7 @@ export function createContext(overrides: Partial<CliContext> = {}): CliContext {
     output: processOutput,
     env,
     cwd: process.cwd(),
+    readStdin: readProcessStdin,
     interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY) && !env.CI,
     prompt: clackPrompter,
     backend: () => (backend ??= BwCliBackend.fromEnv(env, home)),
