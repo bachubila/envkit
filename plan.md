@@ -16,15 +16,15 @@ We ship it as a **CLI first**. A website or dashboard can come later.
 
 ## Data model
 
-| envkit concept | Bitwarden mapping                                                     |
-| -------------- | --------------------------------------------------------------------- |
-| Team           | Organization                                                          |
-| Project        | Collection (e.g. `myapp`)                                             |
-| Environment    | One item per environment in the collection: `myapp/dev`, `myapp/prod` |
-| Variable       | Hidden custom field on that item (`name` = key, `value` = value)      |
-| Item marker    | Secure Note type; notes field holds `envkit:v1` + metadata            |
+| envkit concept | Bitwarden mapping                                                                      |
+| -------------- | -------------------------------------------------------------------------------------- |
+| Team           | Organization                                                                           |
+| Project        | Collection (e.g. `myapp`)                                                              |
+| Environment    | One item per environment in the collection: `myapp/dev`, `myapp/prod`                  |
+| Variable       | Hidden custom field on that item (`name` = key, `value` = value)                       |
+| Item marker    | Secure Note type; notes start with `envkit:v1`, then `project=` / `environment=` lines |
 
-Access control per environment (e.g. only some people can read prod) works by splitting environments into separate collections: `myapp-dev`, `myapp-prod`. `link` supports both layouts.
+By default all of a project's environments share one collection. For per-environment access control (e.g. only some people can read prod), put an environment in its own collection with `envkit env add prod --collection myapp-prod`. `.envkit.json` stores a collection per environment, so both layouts work everywhere.
 
 ## Repo layout
 
@@ -93,31 +93,27 @@ What we learned (and what later phases need to know):
 - **Env vars added:** `ENVKIT_HOME`, `ENVKIT_BW_PATH`, `ENVKIT_SERVER`, `ENVKIT_EMAIL`, `ENVKIT_PASSWORD`, `ENVKIT_SESSION`, `ENVKIT_SESSION_IDLE_MINUTES` (plus `BW_CLIENTID` / `BW_CLIENTSECRET`). Phase 5 builds on these.
 - **Not verified yet:** the interactive prompts in a real terminal (`@clack/prompts`), `bw`'s 2FA prompts, and the macOS and Windows keychains. Check them by hand before release (Phase 6).
 
-## Phase 2 — Project linking
+## Phase 2 — Project linking ✅
 
 **Goal:** connect a repo to an org, collection and environment.
 
-- [ ] `.envkit.json` schema (validate with `zod` or `valibot`):
-  ```json
-  {
-    "version": 1,
-    "server": "https://vault.acme.dev",
-    "organizationId": "…",
-    "project": "myapp",
-    "environments": {
-      "dev": { "collectionId": "…", "itemId": "…" },
-      "prod": { "collectionId": "…", "itemId": "…" }
-    },
-    "defaultEnvironment": "dev"
-  }
-  ```
-- [ ] `envkit init`: interactive. Pick an org and a collection (or create a collection if the user has permission), then create the env items.
-- [ ] `envkit link <project> [--env <name>]`: links an existing project without prompts, for teammates cloning the repo.
-- [ ] `envkit env list` / `envkit env add <name>` / `envkit env remove <name>`.
-- [ ] Find the config by walking up from the current directory, so it works from subdirectories in a monorepo.
-- [ ] Warn when the configured server doesn't match the logged-in server.
+- [x] `.envkit.json` schema (validated with `valibot`): `version`, `server`, `organizationId`, `project`, `defaultEnvironment`, `environments: { <name>: { collectionId, itemId } }`. Written with fixed key order and sorted environments to keep diffs small. It holds IDs only and is meant to be committed.
+- [x] `envkit init [--org] [--project] [--collection] [--env dev,prod] [--force]`: picks the org (flag, the only one, or a prompt), then finds or creates the collection and finds or creates one item per environment. Re-running it reuses everything.
+- [x] `envkit link <project> [--org] [--env] [--force]`: writes `.envkit.json` for a project that already exists in the vault, found by the item marker. **Teammates normally don't need it**: once `.envkit.json` is committed, a clone plus `envkit login` is enough. `link` is for repos without the file, or for recreating it.
+- [x] `envkit env list` (variable count per environment, and fails if any can't be opened), `envkit env add <name> [--collection] [--default]`, `envkit env remove <name> [--delete]` (`--delete` moves the item to the trash).
+- [x] Config is found by walking up from the current directory, so commands work in monorepo subdirectories; the nearest `.envkit.json` wins.
+- [x] Warn when the configured server doesn't match the logged-in server (`env` commands; Phase 3 commands should reuse `warnOnServerMismatch`).
 
-**Done when:** a second user on another machine can clone the repo, run `envkit login` and resolve the same items.
+**Done when:** a second user on another machine can clone the repo, run `envkit login` and resolve the same items. ✅ The integration test runs two real accounts: Alice runs `init`, Bob is added to the org with access to the collection, and Bob's `env list` resolves the same items from a copy of `.envkit.json`.
+
+What we learned (and what later phases need to know):
+
+- **Never let a non-admin try to create a collection.** Vaultwarden answers with a 401 instead of a 403, and `bw` then **logs the user out**. `canCreateCollections()` (owner or admin only) gates every `createCollection` call, and `FakeVault` copies the logout so a regression fails the tests. Managers and custom roles are treated as unable to create collections; that could be relaxed later.
+- **`bw` reads a local copy of the vault.** Newly granted access, or a collection a teammate just created, stays invisible until `bw sync`. `init`, `link` and `env` sync first, which also prevents duplicate collections. Phase 3's planned "sync when the cache is older than N" fits here.
+- **`bw get item` still returns trashed items.** The backend treats an item with `deletedDate` as gone, and `listItems` skips them.
+- **Items are found by the notes marker, not the name.** Renaming an item in the web vault doesn't break `init` or `link`. Project matching is exact, so `myapp` doesn't match `myapp-api`.
+- **The test kit's `VaultwardenApi` now creates organizations and adds and confirms members** (org key wrapped with RSA-OAEP). Phase 3+ integration tests can build on `cliUser()` in `tools/testkit/tests/setup.ts`.
+- **Not done:** pruning dangling environments (an item deleted in the web vault stays in `.envkit.json` until `env remove`; `env list` reports it), and renaming a project.
 
 ## Phase 3 — Reading secrets (the core value)
 
@@ -183,6 +179,6 @@ What we learned (and what later phases need to know):
 
 1. **Minimum `bw` version and Vaultwarden version** we support. Tests currently pin `bw` 2026.10.0 and Vaultwarden 1.37.5; `MIN_BW_VERSION` is 2026.1.0 but untested below 2026.10.0. Add a version matrix to the integration job or raise the minimum.
 2. **Session storage:** Phase 1 uses the OS keychain and falls back to "prompt every time" when there is none. Confirm that fallback is acceptable, or add an opt-in encrypted file store.
-3. **Environment layout default:** one collection per project (simpler) or one per environment (finer access control)?
+3. ~~**Environment layout default:**~~ Resolved in Phase 2: one collection per project by default; `env add --collection` puts an environment in its own collection.
 4. ~~**Package name:**~~ Resolved: `envkit` is free on npm (checked 2026-11-03). The library is `@envkit/core`, so we need to claim the `@envkit` npm scope before publishing.
 5. **License.**

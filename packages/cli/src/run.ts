@@ -45,18 +45,25 @@ export async function run(
   }
 }
 
-/** The (sub)command `rawArgs` points at, and its parent, for `--help`. */
+/**
+ * The (sub)command `rawArgs` points at, plus a stand-in parent whose name is
+ * the full command path (e.g. "envkit env"), so usage reads `envkit env add`.
+ */
 async function resolveSubCommand(
   command: CommandDef,
   rawArgs: string[],
-  parent?: CommandDef,
+  path: string[] = [],
 ): Promise<[CommandDef, CommandDef | undefined]> {
+  const meta = (await resolve(command.meta)) as CommandMeta | undefined;
+  const here = [...path, meta?.name ?? ""];
   const subCommands = (await resolve(command.subCommands)) ?? {};
   const index = rawArgs.findIndex((arg) => !arg.startsWith("-"));
   const name = index === -1 ? undefined : rawArgs[index];
   const sub = name === undefined ? undefined : subCommands[name];
-  if (!sub) return [command, parent];
-  return resolveSubCommand(await resolve(sub), rawArgs.slice(index + 1), command);
+  if (!sub) {
+    return [command, path.length > 0 ? { meta: { name: path.join(" ") } } : undefined];
+  }
+  return resolveSubCommand(await resolve(sub), rawArgs.slice(index + 1), here);
 }
 
 async function resolve<T>(value: T | Promise<T> | (() => T | Promise<T>)): Promise<T> {

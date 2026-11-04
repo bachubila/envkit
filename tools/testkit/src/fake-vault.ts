@@ -1,7 +1,9 @@
 import {
+  canCreateCollections,
   toError,
   type ApiKeyLoginOptions,
   type Collection,
+  type ItemFilter,
   type LoginOptions,
   type NewVaultItem,
   type Organization,
@@ -33,6 +35,7 @@ export class FakeVault implements VaultBackend {
   readonly calls: string[] = [];
   #session: string | undefined;
   #sessionCounter = 0;
+  #itemCounter = 0;
 
   constructor(accounts: FakeAccount[] = []) {
     this.accounts = accounts;
@@ -104,6 +107,7 @@ export class FakeVault implements VaultBackend {
 
   // Like `bw sync`: needs a login, not an unlocked vault.
   async sync(_session: string): Promise<void> {
+    this.calls.push("sync");
     if (!this.account) throw toError("You are not logged in.");
   }
 
@@ -119,6 +123,41 @@ export class FakeVault implements VaultBackend {
     );
   }
 
+  async createCollection(
+    session: string,
+    organizationId: string,
+    name: string,
+  ): Promise<Collection> {
+    this.#requireSession(session);
+    this.calls.push(`createCollection ${name}`);
+    const organization = this.organizations.find((org) => org.id === organizationId);
+    if (!organization) throw toError("Organization not found.");
+    if (!canCreateCollections(organization)) {
+      // What really happens: Vaultwarden returns 401 and `bw` logs the user out.
+      this.account = undefined;
+      this.#session = undefined;
+      throw toError('{"response":{"error":{"code":401,"reason":"Unauthorized"}},"statusCode":401}');
+    }
+    const collection = { id: `collection-${this.collections.length + 1}`, organizationId, name };
+    this.collections.push(collection);
+    return collection;
+  }
+
+  async listItems(session: string, filter: ItemFilter = {}): Promise<VaultItem[]> {
+    this.#requireSession(session);
+    const search = filter.search?.toLowerCase();
+    return [...this.items.values()]
+      .filter(
+        (item) =>
+          (!filter.organizationId || item.organizationId === filter.organizationId) &&
+          (!filter.collectionId || item.collectionIds.includes(filter.collectionId)) &&
+          (!search ||
+            item.name.toLowerCase().includes(search) ||
+            (item.notes ?? "").toLowerCase().includes(search)),
+      )
+      .map((item) => structuredClone(item));
+  }
+
   async getItem(session: string, id: string): Promise<VaultItem> {
     this.#requireSession(session);
     const item = this.items.get(id);
@@ -128,9 +167,10 @@ export class FakeVault implements VaultBackend {
 
   async createItem(session: string, item: NewVaultItem): Promise<VaultItem> {
     this.#requireSession(session);
+    this.calls.push(`createItem ${item.name}`);
     const created = {
       ...structuredClone(item),
-      id: `item-${this.items.size + 1}`,
+      id: `item-${++this.#itemCounter}`,
       revisionDate: now(),
     };
     this.items.set(created.id, created);
@@ -143,6 +183,12 @@ export class FakeVault implements VaultBackend {
     const updated = { ...structuredClone(item), revisionDate: now() };
     this.items.set(item.id, updated);
     return structuredClone(updated);
+  }
+
+  async deleteItem(session: string, id: string): Promise<void> {
+    this.#requireSession(session);
+    this.calls.push(`deleteItem ${id}`);
+    if (!this.items.delete(id)) throw toError("Not found.");
   }
 
   #find(email: string): FakeAccount {

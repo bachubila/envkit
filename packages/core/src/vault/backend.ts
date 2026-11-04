@@ -8,9 +8,28 @@ export interface VaultStatus {
   lastSync: Date | undefined;
 }
 
+/** The current user's role in an organization. */
+export type OrganizationRole = "owner" | "admin" | "user" | "manager" | "custom";
+
 export interface Organization {
   id: string;
   name: string;
+  role: OrganizationRole;
+}
+
+/**
+ * Only owners and admins may create collections. Don't let anyone else try:
+ * Vaultwarden answers with a 401 and `bw` then logs the user out.
+ */
+export function canCreateCollections(organization: Organization): boolean {
+  return organization.role === "owner" || organization.role === "admin";
+}
+
+export interface ItemFilter {
+  organizationId?: string;
+  collectionId?: string;
+  /** Free-text search, as `bw list items --search`. */
+  search?: string;
 }
 
 export interface Collection {
@@ -71,7 +90,14 @@ export interface VaultBackend {
   sync(session: string): Promise<void>;
   listOrganizations(session: string): Promise<Organization[]>;
   listCollections(session: string, organizationId?: string): Promise<Collection[]>;
+  /** Requires owner or admin rights; check `canCreateCollections` first. */
+  createCollection(session: string, organizationId: string, name: string): Promise<Collection>;
+  /** Items the user can see, excluding the trash. */
+  listItems(session: string, filter?: ItemFilter): Promise<VaultItem[]>;
+  /** Throws "Item not found" for missing items and items in the trash. */
   getItem(session: string, id: string): Promise<VaultItem>;
   createItem(session: string, item: NewVaultItem): Promise<VaultItem>;
   updateItem(session: string, item: VaultItem): Promise<VaultItem>;
+  /** Moves the item to the trash (restorable from the web vault). */
+  deleteItem(session: string, id: string): Promise<void>;
 }

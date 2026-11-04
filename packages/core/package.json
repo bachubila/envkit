@@ -25,7 +25,8 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@napi-rs/keyring": "catalog:"
+    "@napi-rs/keyring": "catalog:",
+    "valibot": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -1,8 +1,30 @@
+export {
+  CONFIG_FILE,
+  findConfig,
+  loadConfig,
+  parseConfig,
+  resolveEnvironment,
+  writeConfig,
+  type EnvironmentRef,
+  type EnvkitConfig,
+  type LoadedConfig,
+} from "./config.ts";
 export { EnvkitError, isEnvkitError } from "./errors.ts";
 export { envkitHome, type Env } from "./paths.ts";
+export {
+  environmentItemName,
+  environmentItemNotes,
+  ITEM_MARKER,
+  parseEnvironmentItem,
+  validateEnvironmentName,
+  validateProjectName,
+} from "./project.ts";
 export { normalizeServerUrl } from "./server-url.ts";
 export {
+  canCreateCollections,
   FieldType,
+  type ItemFilter,
+  type OrganizationRole,
   type ApiKeyLoginOptions,
   type Collection,
   type LoginOptions,

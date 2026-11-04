@@ -16,15 +16,24 @@ export interface Output {
   stderr(text: string): void;
 }
 
+export interface SelectOption<T> {
+  value: T;
+  label: string;
+  hint?: string;
+}
+
 export interface Prompter {
-  text(message: string, options?: { placeholder?: string }): Promise<string>;
+  text(message: string, options?: { placeholder?: string; initialValue?: string }): Promise<string>;
   password(message: string): Promise<string>;
+  select<T>(message: string, options: SelectOption<T>[]): Promise<T>;
 }
 
 /** Everything a command needs from the outside world; tests replace any of it. */
 export interface CliContext {
   output: Output;
   env: Env;
+  /** Directory commands treat as the project directory. */
+  cwd: string;
   /** Whether envkit may prompt. False in CI and when stdin/stdout aren't terminals. */
   interactive: boolean;
   prompt: Prompter;
@@ -51,18 +60,29 @@ export const processOutput: Output = {
 
 export const clackPrompter: Prompter = {
   async text(message, options) {
-    return unwrap(await clack.text({ message, placeholder: options?.placeholder }));
+    const value = await clack.text({
+      message,
+      placeholder: options?.placeholder,
+      initialValue: options?.initialValue,
+    });
+    return unwrap(value);
   },
   async password(message) {
     return unwrap(await clack.password({ message }));
   },
+  async select<T>(message: string, options: SelectOption<T>[]): Promise<T> {
+    // clack's option type is conditional on T; the shape is the same.
+    const value = await clack.select<T>({
+      message,
+      options: options as Parameters<typeof clack.select<T>>[0]["options"],
+    });
+    return unwrap(value) as T;
+  },
 };
 
-function unwrap(value: string | symbol): string {
-  if (typeof value !== "string" || clack.isCancel(value)) {
-    throw new EnvkitError("Cancelled", { exitCode: 130 });
-  }
-  return value;
+function unwrap<T>(value: T): Exclude<T, symbol> {
+  if (clack.isCancel(value)) throw new EnvkitError("Cancelled", { exitCode: 130 });
+  return value as Exclude<T, symbol>;
 }
 
 /** The real context. Backend and session store are created on first use, so `--help` stays fast. */
@@ -74,6 +94,7 @@ export function createContext(overrides: Partial<CliContext> = {}): CliContext {
   return {
     output: processOutput,
     env,
+    cwd: process.cwd(),
     interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY) && !env.CI,
     prompt: clackPrompter,
     backend: () => (backend ??= BwCliBackend.fromEnv(env, home)),

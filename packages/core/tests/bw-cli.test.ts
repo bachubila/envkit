@@ -95,12 +95,23 @@ describe("BwCliBackend", () => {
   });
 
   test("lists organizations and collections", async () => {
-    await bw.respond("list organizations", ok({ data: [{ id: "o1", name: "Acme", status: 2 }] }));
+    await bw.respond(
+      "list organizations",
+      ok({
+        data: [
+          { id: "o1", name: "Acme", status: 2, type: 0 },
+          { id: "o2", name: "Other", status: 2, type: 2 },
+        ],
+      }),
+    );
     await bw.respond(
       "list collections",
       ok({ data: [{ id: "c1", organizationId: "o1", name: "myapp", externalId: null }] }),
     );
-    expect(await backend.listOrganizations("s")).toEqual([{ id: "o1", name: "Acme" }]);
+    expect(await backend.listOrganizations("s")).toEqual([
+      { id: "o1", name: "Acme", role: "owner" },
+      { id: "o2", name: "Other", role: "user" },
+    ]);
     expect(await backend.listCollections("s", "o1")).toEqual([
       { id: "c1", organizationId: "o1", name: "myapp" },
     ]);
@@ -176,6 +187,69 @@ describe("BwCliBackend", () => {
     const edit = (await bw.calls()).at(-1);
     const payload = JSON.parse(Buffer.from(edit?.stdin ?? "", "base64").toString());
     expect(payload).toMatchObject({ favorite: false, secureNote: { type: 0 }, fields: [] });
+  });
+
+  test("createCollection sends the payload on stdin", async () => {
+    await bw.respond(
+      "create org-collection",
+      ok({ object: "org-collection", id: "c9", organizationId: "o1", name: "myapp", users: [] }),
+    );
+    expect(await backend.createCollection("s", "o1", "myapp")).toEqual({
+      id: "c9",
+      organizationId: "o1",
+      name: "myapp",
+    });
+    const call = (await bw.calls()).at(-1);
+    expect(call?.args.slice(0, 4)).toEqual(["create", "org-collection", "--organizationid", "o1"]);
+    expect(JSON.parse(Buffer.from(call?.stdin ?? "", "base64").toString())).toEqual({
+      organizationId: "o1",
+      name: "myapp",
+      externalId: null,
+      groups: [],
+      users: [],
+    });
+  });
+
+  test("listItems passes filters and drops trashed items", async () => {
+    await bw.respond(
+      "list items",
+      ok({
+        data: [
+          rawItem,
+          { ...rawItem, id: "i2", name: "myapp/old", deletedDate: "2026-11-01T00:00:00.000Z" },
+        ],
+      }),
+    );
+    const items = await backend.listItems("s", {
+      organizationId: "o1",
+      collectionId: "c1",
+      search: "myapp/",
+    });
+    expect(items.map((item) => item.id)).toEqual(["i1"]);
+    expect((await bw.calls()).at(-1)?.args.slice(0, 8)).toEqual([
+      "list",
+      "items",
+      "--organizationid",
+      "o1",
+      "--collectionid",
+      "c1",
+      "--search",
+      "myapp/",
+    ]);
+  });
+
+  test("getItem treats trashed items as gone", async () => {
+    await bw.respond("get item i1", ok({ ...rawItem, deletedDate: "2026-11-01T00:00:00.000Z" }));
+    await expect(backend.getItem("s", "i1")).rejects.toMatchObject({
+      message: "Item is in the vault's trash",
+      hint: "Restore it in the web vault.",
+    });
+  });
+
+  test("deleteItem", async () => {
+    await bw.respond("delete item i1", { stdout: { success: true } });
+    await backend.deleteItem("s", "i1");
+    expect((await bw.calls()).at(-1)?.args.slice(0, 3)).toEqual(["delete", "item", "i1"]);
   });
 
   test("logout when already logged out succeeds", async () => {

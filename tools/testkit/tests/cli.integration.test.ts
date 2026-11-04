@@ -1,9 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { createSessionStore, MemorySessionStore, SessionManager } from "@envkit/core";
+import { createSessionStore } from "@envkit/core";
 import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
-import { run } from "../../../packages/cli/src/run.ts";
-import { BW_PATH, startTestServer, type TestServer } from "./setup.ts";
+import { BW_PATH, cliUser, startTestServer, type TestServer } from "./setup.ts";
 
 let server: TestServer;
 
@@ -23,23 +22,10 @@ async function cliEnv() {
 
 describe("envkit CLI against Vaultwarden (in-process)", () => {
   test("login → status → lock → unlock → logout", async () => {
-    const env = { ...(await cliEnv()), ENVKIT_PASSWORD: server.account.password };
-    const sessions = new SessionManager(new MemorySessionStore());
-    let out: string[] = [];
-    const envkit = async (...args: string[]) => {
-      out = [];
-      const errors: string[] = [];
-      const code = await run(args, {
-        env,
-        interactive: false,
-        sessions: async () => sessions,
-        output: { stdout: (text) => out.push(text), stderr: (text) => errors.push(text) },
-      });
-      return { code, stdout: out.join("\n"), stderr: errors.join("\n") };
-    };
-    const state = async () => JSON.parse((await envkit("status", "--json")).stdout).state;
+    const alice = await cliUser(server, server.account);
+    const state = async () => JSON.parse((await alice.envkit("status", "--json")).stdout).state;
 
-    const login = await envkit(
+    const login = await alice.envkit(
       "login",
       "--server",
       server.vaultwarden.url,
@@ -50,13 +36,13 @@ describe("envkit CLI against Vaultwarden (in-process)", () => {
     expect(login.stdout).toContain(`Logged in as ${server.account.email}`);
     expect(await state()).toBe("unlocked");
 
-    expect((await envkit("lock")).code).toBe(0);
+    expect((await alice.envkit("lock")).code).toBe(0);
     expect(await state()).toBe("locked");
 
-    expect((await envkit("unlock")).stdout).toContain("Vault unlocked.");
+    expect((await alice.envkit("unlock")).stdout).toContain("Vault unlocked.");
     expect(await state()).toBe("unlocked");
 
-    expect((await envkit("logout")).code).toBe(0);
+    expect((await alice.envkit("logout")).code).toBe(0);
     expect(await state()).toBe("unauthenticated");
   });
 });

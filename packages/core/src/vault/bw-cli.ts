@@ -5,9 +5,11 @@ import type { Env } from "../paths.ts";
 import type {
   ApiKeyLoginOptions,
   Collection,
+  ItemFilter,
   LoginOptions,
   NewVaultItem,
   Organization,
+  OrganizationRole,
   VaultBackend,
   VaultField,
   VaultItem,
@@ -130,7 +132,7 @@ export class BwCliBackend implements VaultBackend {
     const data = await this.#call<{ data: RawOrganization[] }>(["list", "organizations"], {
       session,
     });
-    return data.data.map(({ id, name }) => ({ id, name }));
+    return data.data.map(({ id, name, type }) => ({ id, name, role: ROLES[type] ?? "custom" }));
   }
 
   async listCollections(session: string, organizationId?: string): Promise<Collection[]> {
@@ -140,8 +142,39 @@ export class BwCliBackend implements VaultBackend {
     return data.data.map(({ id, organizationId, name }) => ({ id, organizationId, name }));
   }
 
+  async createCollection(
+    session: string,
+    organizationId: string,
+    name: string,
+  ): Promise<Collection> {
+    const payload = { organizationId, name, externalId: null, groups: [], users: [] };
+    const data = await this.#call<RawCollection>(
+      ["create", "org-collection", "--organizationid", organizationId],
+      { session, input: encode(payload) },
+    );
+    return { id: data.id, organizationId: data.organizationId, name: data.name };
+  }
+
+  async listItems(session: string, filter: ItemFilter = {}): Promise<VaultItem[]> {
+    const args = ["list", "items"];
+    if (filter.organizationId) args.push("--organizationid", filter.organizationId);
+    if (filter.collectionId) args.push("--collectionid", filter.collectionId);
+    if (filter.search) args.push("--search", filter.search);
+    const data = await this.#call<{ data: RawItem[] }>(args, { session });
+    return data.data.filter((item) => !item.deletedDate).map(toVaultItem);
+  }
+
   async getItem(session: string, id: string): Promise<VaultItem> {
-    return toVaultItem(await this.#call<RawItem>(["get", "item", id], { session }));
+    const raw = await this.#call<RawItem>(["get", "item", id], { session });
+    // `bw get` still returns trashed items.
+    if (raw.deletedDate) {
+      throw new BwError(
+        "Not found.",
+        "Item is in the vault's trash",
+        "Restore it in the web vault.",
+      );
+    }
+    return toVaultItem(raw);
   }
 
   async createItem(session: string, item: NewVaultItem): Promise<VaultItem> {
@@ -165,6 +198,10 @@ export class BwCliBackend implements VaultBackend {
     return toVaultItem(
       await this.#call<RawItem>(["edit", "item", item.id], { session, input: encode(payload) }),
     );
+  }
+
+  async deleteItem(session: string, id: string): Promise<void> {
+    await this.#call(["delete", "item", id], { session });
   }
 
   /** Runs `bw <args> --response` and returns `data`, or throws a mapped error. */
@@ -320,7 +357,17 @@ interface RawStatus {
 interface RawOrganization {
   id: string;
   name: string;
+  type: number;
 }
+
+// Bitwarden's OrganizationUserType.
+const ROLES: Record<number, OrganizationRole> = {
+  0: "owner",
+  1: "admin",
+  2: "user",
+  3: "manager",
+  4: "custom",
+};
 
 interface RawCollection {
   id: string;
@@ -336,5 +383,6 @@ interface RawItem {
   notes?: string | null;
   fields?: VaultField[];
   revisionDate: string;
+  deletedDate?: string | null;
   [key: string]: unknown;
 }
