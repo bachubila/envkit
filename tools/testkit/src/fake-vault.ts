@@ -31,6 +31,8 @@ export class FakeVault implements VaultBackend {
   organizations: Organization[] = [];
   collections: Collection[] = [];
   items = new Map<string, VaultItem>();
+  /** Reported by `status`; set it to make envkit consider the local copy fresh. */
+  lastSync: Date | undefined;
   /** Every method call, in order, for assertions. */
   readonly calls: string[] = [];
   #session: string | undefined;
@@ -55,7 +57,7 @@ export class FakeVault implements VaultBackend {
       serverUrl: this.serverUrl,
       email: this.account?.email,
       userId: this.account ? `user-${this.account.email}` : undefined,
-      lastSync: undefined,
+      lastSync: this.lastSync,
     };
   }
 

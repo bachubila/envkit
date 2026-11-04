@@ -58,3 +58,16 @@ export {
   type SessionStore,
   type StoredSession,
 } from "./session/store.ts";
+export { DEFAULT_SYNC_INTERVAL_MINUTES, needsSync, syncIntervalFromEnv } from "./sync.ts";
+export {
+  buildChildEnv,
+  dotenvQuote,
+  formatVariables,
+  isValidVariableName,
+  OUTPUT_FORMATS,
+  PRIVATE_ENV,
+  readVariables,
+  shellQuote,
+  type OutputFormat,
+  type ReadVariablesResult,
+} from "./variables.ts";

@@ -233,3 +233,11 @@ describe("envkit status", () => {
     expect(JSON.parse((await envkit("status", "--json")).stdout).state).toBe("locked");
   });
 });
+
+describe("ENVKIT_SESSION_STORE", () => {
+  test("memory keeps envkit out of the OS keychain", async () => {
+    const { createContext } = await import("../src/context.ts");
+    const sessions = await createContext({ env: { ENVKIT_SESSION_STORE: "memory" } }).sessions();
+    expect(sessions.store.persistent).toBe(false);
+  });
+});

@@ -179,6 +179,9 @@ catalogs:
     citty:
       specifier: ^0.2.2
       version: 0.2.2
+    dotenv:
+      specifier: 18.0.8
+      version: 18.0.8
     typescript:
       specifier: ^7.0.2
       version: 7.0.2
@@ -252,6 +255,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
+      dotenv:
+        specifier: 'catalog:'
+        version: 18.0.8
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -1322,6 +1328,11 @@ packages:
 
   dom-accessibility-api@0.5.16:
     resolution: {integrity: sha512-X7BJ2yElsnOJ30pZF4uIIDfBEVgF4XEBxL9Bxhy6dnrm5hkzqmsWHGTiHqRiITNhMyFLyAiWndIJP7Z1NTteDg==}
+
+  dotenv@18.0.8:
+    resolution: {integrity: sha512-2KDeoFoK/zRtcnbunCDlLG5VWVMcyqeQc6iK65o231nfNAcuGrKoqUQfJFUtBI+QlShk5HKIHxwebBtUl3rEfA==}
+    engines: {node: '>=12'}
+    hasBin: true
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -3019,6 +3030,8 @@ snapshots:
   detect-libc@2.1.2: {}
 
   dom-accessibility-api@0.5.16: {}
+
+  dotenv@18.0.8: {}
 
   dunder-proto@1.0.1:
     dependencies:

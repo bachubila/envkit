@@ -5,6 +5,7 @@ import {
   EnvkitError,
   envkitHome,
   idleTimeoutFromEnv,
+  MemorySessionStore,
   SessionManager,
   type Env,
   type VaultBackend,
@@ -39,6 +40,8 @@ export interface CliContext {
   prompt: Prompter;
   backend(): VaultBackend;
   sessions(): Promise<SessionManager>;
+  /** Set by commands that pass through a child's exit code (`envkit run`). */
+  exitCode?: number;
 }
 
 const storage = new AsyncLocalStorage<CliContext>();
@@ -99,9 +102,11 @@ export function createContext(overrides: Partial<CliContext> = {}): CliContext {
     prompt: clackPrompter,
     backend: () => (backend ??= BwCliBackend.fromEnv(env, home)),
     sessions: () =>
-      (sessions ??= createSessionStore(home).then(
-        (store) => new SessionManager(store, { idleTimeoutMs: idleTimeoutFromEnv(env) }),
-      )),
+      (sessions ??= (
+        env.ENVKIT_SESSION_STORE === "memory"
+          ? Promise.resolve(new MemorySessionStore())
+          : createSessionStore(home)
+      ).then((store) => new SessionManager(store, { idleTimeoutMs: idleTimeoutFromEnv(env) }))),
     ...overrides,
   };
 }

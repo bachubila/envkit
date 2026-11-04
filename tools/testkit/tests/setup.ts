@@ -2,7 +2,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { MemorySessionStore, SessionManager } from "@envkit/core";
+import { spawnSync } from "node:child_process";
+import { BwCliBackend, MemorySessionStore, SessionManager } from "@envkit/core";
 import { run } from "../../../packages/cli/src/run.ts";
 import {
   startVaultwarden,
@@ -13,6 +14,7 @@ import {
 
 /** The `bw` from this package's devDependencies, so tests pin the version they run against. */
 export const BW_PATH = fileURLToPath(new URL("../node_modules/.bin/bw", import.meta.url));
+const BIN = fileURLToPath(new URL("../../../packages/cli/src/bin.ts", import.meta.url));
 
 export interface TestServer {
   vaultwarden: Vaultwarden;
@@ -72,6 +74,7 @@ export async function cliUser(
   };
   const sessions = new SessionManager(new MemorySessionStore());
   const user = {
+    env,
     cwd: cwd ?? (await server.tempHome()),
     async envkit(...args: string[]) {
       const out: string[] = [];
@@ -84,6 +87,20 @@ export async function cliUser(
         output: { stdout: (text) => out.push(text), stderr: (text) => err.push(text) },
       });
       return { code, stdout: out.join("\n"), stderr: err.join("\n") };
+    },
+    /** The real binary in a child process (sessions kept in memory, so no keychain entries). */
+    spawn(...args: string[]) {
+      return spawnSync(process.execPath, ["--conditions=source", BIN, ...args], {
+        cwd: user.cwd,
+        env: { ...env, ENVKIT_SESSION_STORE: "memory" },
+        encoding: "utf8",
+      });
+    },
+    /** A backend logged in as this user, for setting up vault data directly. */
+    async backend() {
+      const backend = BwCliBackend.fromEnv(env, env.ENVKIT_HOME);
+      const session = await backend.unlock(account.password);
+      return { backend, session };
     },
     async login() {
       const result = await user.envkit(

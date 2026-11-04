@@ -11,6 +11,7 @@ catalog:
   "@napi-rs/keyring": 2.1.1
   "@types/node": ^24
   citty: ^0.2.2
+  dotenv: 18.0.8
   typescript: ^7.0.2
   valibot: 1.5.0
   vite: npm:@voidzero-dev/vite-plus-core@1.4.0

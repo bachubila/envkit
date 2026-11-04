@@ -16,8 +16,11 @@ export async function run(
   const context = createContext(overrides);
   const { output } = context;
   try {
-    if (rawArgs.length === 0 || rawArgs.includes("--help") || rawArgs.includes("-h")) {
-      const [target, parent] = await resolveSubCommand(command, rawArgs);
+    // Anything after `--` belongs to the command `envkit run` starts.
+    const separator = rawArgs.indexOf("--");
+    const ownArgs = separator === -1 ? rawArgs : rawArgs.slice(0, separator);
+    if (rawArgs.length === 0 || ownArgs.includes("--help") || ownArgs.includes("-h")) {
+      const [target, parent] = await resolveSubCommand(command, ownArgs);
       output.stdout(await renderUsage(target, parent));
       return 0;
     }
@@ -27,7 +30,7 @@ export async function run(
       return 0;
     }
     await withContext(context, () => runCommand(command, { rawArgs }));
-    return 0;
+    return context.exitCode ?? 0;
   } catch (error) {
     if (isEnvkitError(error)) {
       output.stderr(`error: ${error.message}`);
@@ -36,7 +39,7 @@ export async function run(
     }
     if (error instanceof Error && error.name === "CLIError") {
       output.stderr(`error: ${error.message}`);
-      output.stderr("Run `envkit --help` to see the available commands.");
+      output.stderr("Run `envkit --help` for usage.");
       return 1;
     }
     output.stderr(`envkit crashed unexpectedly. This is a bug, please report it.`);

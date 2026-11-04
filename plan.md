@@ -115,19 +115,28 @@ What we learned (and what later phases need to know):
 - **The test kit's `VaultwardenApi` now creates organizations and adds and confirms members** (org key wrapped with RSA-OAEP). Phase 3+ integration tests can build on `cliUser()` in `tools/testkit/tests/setup.ts`.
 - **Not done:** pruning dangling environments (an item deleted in the web vault stays in `.envkit.json` until `env remove`; `env list` reports it), and renaming a project.
 
-## Phase 3 — Reading secrets (the core value)
+## Phase 3 — Reading secrets (the core value) ✅
 
 **Goal:** developers get their env vars with one command.
 
-- [ ] `envkit run [--env <name>] -- <cmd...>`: fetch, merge into `process.env`, spawn the child with stdio inherited, forward signals and pass through the exit code.
-- [ ] `envkit pull [--env <name>] [--out .env] [--format dotenv|json|shell]`: explicit export. Warn if the output file isn't in `.gitignore`.
-- [ ] `envkit get <KEY>`: prints one value (for scripts).
-- [ ] `envkit list`: lists keys only. Values are masked unless `--reveal` is passed.
-- [ ] Precedence rules (document them): existing shell env vs vault values. Default: the vault wins, `--no-override` keeps existing values.
-- [ ] Optional variable references (`${OTHER_KEY}`). Decide now whether to support them, but they can ship later.
-- [ ] Sync before reading (`bw sync`) when the local cache is older than a threshold; `--offline` skips it.
+- [x] `envkit run [-e <env>] [--no-override] [--offline] -- <cmd...>`: spawns the command with inherited stdio in the project directory. It forwards SIGINT/SIGTERM/SIGHUP/SIGQUIT and passes the exit code through (128 + signal number when a signal killed the child, 127 for an unknown command). Only args before `--` count as envkit's, so `envkit run -- node --help` reaches node.
+- [x] `envkit pull [-e] [--out .env] [--format dotenv|json|shell]`: stdout by default. `--out` writes with mode 600 and warns when git would pick the file up (`git check-ignore`).
+- [x] `envkit get <KEY>` prints one value; `envkit list [--reveal]` prints names with masked values.
+- [x] `envkit sync` (new): forces a sync, e.g. right after a teammate changed a value or gave you access.
+- [x] **Precedence (decided):** vault values replace variables already set in the shell. `--no-override` keeps the shell's. `ENVKIT_PASSWORD` and `ENVKIT_SESSION` are always removed from the child's environment, so the app never sees the master password.
+- [x] **Variable references (decided): not supported.** Values are literal; `$`, `${HOME}` and backticks are never expanded, in `run` or in any output format. Revisit only if users ask.
+- [x] **Sync policy:** sync before reading when `bw`'s last sync is older than `ENVKIT_SYNC_INTERVAL_MINUTES` (default 5; 0 = always). `--offline` skips it. A teammate's change therefore shows up within 5 minutes, or straight away after `envkit sync`.
 
-**Done when:** `envkit run -- node -e "console.log(process.env.API_KEY)"` prints the value stored in Vaultwarden.
+**Done when:** `envkit run -- node -e "console.log(process.env.API_KEY)"` prints the value stored in Vaultwarden. ✅ The integration test does exactly that through the real binary, then has a second user read the same values and pick up a rotated value after `envkit sync`.
+
+What we learned (and what later phases need to know):
+
+- **Field → variable rules:** text, hidden and boolean custom fields become variables (an empty value becomes `""`). Invalid names (`my key`, `1ST`) and linked fields are skipped with a warning; for duplicate names the last field wins, also with a warning. Phase 4's `set` must refuse invalid names up front.
+- **`.env` quoting is checked against the `dotenv` package.** dotenv keeps single- and backtick-quoted text literally (real newlines included) and only expands `\n`/`\r` inside double quotes, with no other escapes. envkit picks bare → `'…'` → `` `…` `` → `"…"` and **refuses** values no form can hold exactly (quotes of every kind mixed with line breaks), pointing at `--format json|shell`. Shell output uses POSIX single quotes and round-trips through `sh` in tests.
+- **`ENVKIT_SESSION_STORE=memory`** (new) keeps envkit out of the OS keychain. The integration tests use it for spawned binaries; it's also useful on shared machines.
+- **Latency:** each read costs about 3–4 `bw` processes (status, status with session, maybe sync, get item), so 3–6 s per `envkit run`. That's acceptable for starting a dev server, slow for scripts calling `envkit get` in a loop (use `pull --format shell` once instead). This is the main argument for Phase 7's native backend; a cheaper fix is skipping the second `status` call when the cached session was validated recently.
+- **The integration suite now takes about 10 minutes** (4 files, each starting its own Vaultwarden, plus slow `bw` calls). Before it grows further, share one server per run through a Vitest `globalSetup`.
+- **Not done:** Windows support in `run` (`.cmd` shims need `shell: true` or cross-spawn), and loading a `.env` file _and_ the vault together.
 
 ## Phase 4 — Writing secrets
 
