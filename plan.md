@@ -261,9 +261,43 @@ What we learned (and what later phases need to know):
 - [ ] `envkit doctor`: checks the backend (and the `bw` version with `ENVKIT_BACKEND=bw`), server reachability, login state, config validity and `.gitignore` coverage.
 - [x] Integration tests against Vaultwarden in docker (`vaultwarden/server`), run in CI. Done in Phase 1 (`tools/testkit`). Extend them as each phase adds commands.
 - [ ] Manual check of interactive prompts, 2FA and the macOS/Windows keychains (see Phase 1 notes).
-- [ ] Publish to npm (`npx envkit`, `pnpm dlx envkit`). Consider single-file binaries later.
-- [ ] Docs: README quickstart, command reference, team setup guide (org, collections, roles).
+- [ ] Publish to npm (`npx envkit`, `pnpm dlx envkit`); see **Release 0.1.0** below. Consider single-file binaries later.
+- [x] **License: MIT** (decided 2026-11-05). `LICENSE` is at the root and in each package, so tarballs include it.
+- [x] Docs: README installation, quickstart, command and env var reference (2026-11-05). **Still to do:** a fuller team setup guide (org roles, collections per environment, offboarding).
 - [ ] Versioning and changelog (changesets or similar).
+
+### Release 0.1.0 (preview on the `next` tag)
+
+**Publishing decisions (2026-11-05):**
+
+- **Publish one package, `envkit`, with `@envkit/core` bundled into it.** Core's API isn't meant for others yet, and one package means one version to manage and one thing to install. The `@envkit` npm organization is claimed (owner `bachubila`, 2FA on) to keep the scope. Publish `@envkit/core` only when someone needs the library, and keep it `private: true` until then.
+- **Version 0.1.0 on the `next` dist-tag.** `npm i -g envkit@next` gets it, while `npm i envkit` gets nothing until a stable release is tagged `latest`. Move to 1.0.0 once the open issues below are closed and the manual checks are done.
+- **Publish with pnpm, never plain `npm publish`.** The manifests use `workspace:` and `catalog:` versions, which only pnpm rewrites. `npm publish` would upload them literally and break installs.
+- **The first release is published by hand from a machine with npm 2FA** (`pnpm --filter envkit publish --tag next`, which asks for the one-time code). After that, releases come from GitHub Actions with npm trusted publishing (OIDC, no stored token) and `--provenance`. Configure the trusted publisher for the repo that will make the releases: `ebachubila/envkit` first, then the personal mirror once it takes over (see Repos below).
+
+**Must be done before publishing:**
+
+- [ ] **High security issue:** vault values can set `NODE_OPTIONS`, `LD_PRELOAD`, `DYLD_*`, `PATH`, `BASH_ENV` and similar (see the security review above). Refuse them by default, with an opt-in per name.
+- [ ] **The `bw`-backend integration suite has passed** (`ENVKIT_BACKEND=bw vp run test:integration`, about 20 minutes, needs free memory). The last run was stopped for low memory before any test ran.
+- [ ] **Bundle core into the CLI:**
+  - In `packages/cli/vite.config.ts`, add `pack.noExternal: ["@envkit/core"]`.
+  - Move `@envkit/core` to `devDependencies`.
+  - Add core's runtime dependencies to the CLI's `dependencies`: `@napi-rs/keyring` (native, so keep it external), `dotenv` and `valibot`.
+  - Mark `packages/core` as `private: true`.
+- [ ] **Package metadata for `envkit`:**
+  - Set `version` to 0.1.0.
+  - Add `engines.node` `>=22.18.0` (today it's only in the root `package.json`).
+  - Add `repository`, `homepage`, `bugs` and `keywords`.
+  - Add a README in `packages/cli`: the tarball has none, so the npm page would be empty. Copy the root README at build time, or keep a short one that links to it.
+- [ ] **Check the tarball:**
+  - `pnpm pack` in `packages/cli`; the contents should be `dist/bin.mjs`, `LICENSE`, `README.md` and `package.json`.
+  - Install the `.tgz` globally in a clean directory and run `envkit --version`.
+  - Run a login → init → set → run flow against `pnpm sandbox`.
+- [ ] **CI runs on GitHub.** The workflow triggers on `main`, but the repo's branch is `master`. Pick one (deferred by the owner on 2026-11-05), then get one green run.
+
+**Repos:** `origin` (`github.com:ebachubila/envkit`, private) is where work is pushed and proven. `origin-public` is the owner's personal mirror and is not pushed to until `origin` is proven to work. It will be the public, deployed home.
+
+**Can wait until after 0.1.0:** the Medium and Low items from the security review, `envkit doctor`, two-step login on the native backend, manual macOS/Windows keychain checks, and changesets.
 
 **Done when:** a new team can go from zero to `envkit run` by following the README alone.
 
