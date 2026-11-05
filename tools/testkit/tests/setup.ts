@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { BwCliBackend, MemorySessionStore, SessionManager } from "@envkit/core";
+import { createBackend, MemorySessionStore, SessionManager } from "@envkit/core";
 import { run } from "../../../packages/cli/src/run.ts";
 import { randomUUID } from "node:crypto";
 import { inject } from "vite-plus/test";
@@ -11,6 +11,16 @@ import { VaultwardenApi, type TestAccount } from "../src/index.ts";
 
 /** The `bw` from this package's devDependencies, so tests pin the version they run against. */
 export const BW_PATH = fileURLToPath(new URL("../node_modules/.bin/bw", import.meta.url));
+
+/**
+ * The backend envkit uses in these tests: ENVKIT_BACKEND from the test run
+ * (`native` by default). With the native backend `bw` points nowhere, so any
+ * command that still spawned it would fail.
+ */
+export const BACKEND_ENV = {
+  ENVKIT_BACKEND: process.env.ENVKIT_BACKEND || "native",
+  ENVKIT_BW_PATH: process.env.ENVKIT_BACKEND === "bw" ? BW_PATH : "/nonexistent/bw",
+};
 const BIN = fileURLToPath(new URL("../../../packages/cli/src/bin.ts", import.meta.url));
 
 export interface TestServer {
@@ -69,7 +79,7 @@ export async function cliUser(
   const env = {
     ...server.env,
     ENVKIT_HOME: await server.tempHome(),
-    ENVKIT_BW_PATH: BW_PATH,
+    ...BACKEND_ENV,
     ENVKIT_PASSWORD: account.password,
   };
   const sessions = new SessionManager(new MemorySessionStore());
@@ -98,7 +108,7 @@ export async function cliUser(
     },
     /** A backend logged in as this user, for setting up vault data directly. */
     async backend() {
-      const backend = BwCliBackend.fromEnv(env, env.ENVKIT_HOME);
+      const backend = createBackend(env, env.ENVKIT_HOME);
       const session = await backend.unlock(account.password);
       return { backend, session };
     },

@@ -62,6 +62,7 @@ function envkit(args: string[]) {
     env: {
       PATH: process.env.PATH,
       ENVKIT_HOME: join(dir, "home"),
+      ENVKIT_BACKEND: "bw",
       ENVKIT_BW_PATH: bw.path,
       ENVKIT_SESSION: "test-session",
     },

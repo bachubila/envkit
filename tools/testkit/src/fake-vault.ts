@@ -1,5 +1,5 @@
 import {
-  BwError,
+  VaultError,
   canCreateCollections,
   CONFLICT_MESSAGE,
   toError,
@@ -189,7 +189,7 @@ export class FakeVault implements VaultBackend {
     if (!current) throw toError("Not found.");
     this.calls.push(`updateItem ${item.name}`);
     if (current.revisionDate !== item.revisionDate) {
-      throw new BwError("conflict", CONFLICT_MESSAGE, "Run the command again.");
+      throw new VaultError("conflict", CONFLICT_MESSAGE, "Run the command again.");
     }
     const updated = { ...structuredClone(item), revisionDate: this.#nextRevision() };
     this.items.set(item.id, updated);

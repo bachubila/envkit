@@ -1,4 +1,4 @@
-import { BwError, EnvkitError, normalizeServerUrl, type VaultStatus } from "@envkit/core";
+import { VaultError, EnvkitError, normalizeServerUrl, type VaultStatus } from "@envkit/core";
 import type { CliContext } from "./context.ts";
 
 const MAX_PASSWORD_ATTEMPTS = 3;
@@ -26,7 +26,7 @@ export async function requireLogin(
 
 /**
  * A session key that is valid right now: ENVKIT_SESSION, then the cached
- * session, then unlocking with the master password. Costs one `bw status`.
+ * session, then unlocking with the master password. Costs one `status` call.
  */
 export async function requireSession(
   context: CliContext,
@@ -46,15 +46,15 @@ export async function requireSession(
       return { session: cached.key, status };
     }
   }
-  // `bw lock`, a newer unlock elsewhere or an account switch invalidated it.
+  // A lock, a newer unlock elsewhere or an account switch invalidated it.
   if (cached) await sessions.clear();
   return { session: await unlockVault(context, status), status };
 }
 
 /**
- * The cached session as it was last seen, without asking `bw`. Commands that
- * use it must fall back to `requireSession` when `bw` rejects it (see
- * `isSessionRejected`). Saves the two `bw status` calls (~3 s) on warm reads.
+ * The cached session as it was last seen, without asking the backend. Commands
+ * that use it must fall back to `requireSession` when the backend rejects it
+ * (see `isSessionRejected`). With `bw`, that saves two `bw status` calls (~3 s).
  */
 export async function cachedSession(context: CliContext): Promise<Session | undefined> {
   if (context.env.ENVKIT_SESSION) return undefined;
@@ -72,10 +72,11 @@ export async function cachedSession(context: CliContext): Promise<Session | unde
   };
 }
 
-/** Whether `bw` refused a command because the session is no longer valid. */
+/** Whether the backend refused a command because the session is no longer valid. */
 export function isSessionRejected(error: unknown): boolean {
   return (
-    error instanceof BwError && /^(Vault is locked|You are not logged in)/.test(error.bwMessage)
+    error instanceof VaultError &&
+    /^(Vault is locked|You are not logged in)/.test(error.vaultMessage)
   );
 }
 
@@ -143,7 +144,7 @@ export async function currentSession(
   const cached = await sessions.get(status, options);
   if (!cached) return undefined;
   if ((await backend.status(cached)).state === "unlocked") return cached;
-  // `bw lock` or a newer unlock elsewhere invalidated it.
+  // A lock or a newer unlock elsewhere invalidated it.
   await sessions.clear();
   return undefined;
 }
@@ -171,7 +172,7 @@ export async function unlockVault(context: CliContext, status: VaultStatus): Pro
       return session;
     } catch (error) {
       const wrongPassword =
-        error instanceof BwError && error.message === "Incorrect master password";
+        error instanceof VaultError && error.message === "Incorrect master password";
       if (!wrongPassword || attempt >= MAX_PASSWORD_ATTEMPTS) throw error;
       context.output.stderr("Incorrect master password, try again.");
     }

@@ -1,5 +1,5 @@
 import {
-  BwError,
+  VaultError,
   CONFIG_FILE,
   EnvkitError,
   loadConfig,
@@ -36,7 +36,7 @@ const list = defineCommand({
         const count = item.fields.length;
         detail = `${count} variable${count === 1 ? "" : "s"}`;
       } catch (error) {
-        if (!(error instanceof BwError)) throw error;
+        if (!(error instanceof VaultError)) throw error;
         unreachable++;
         detail = `not accessible (${error.message})`;
       }

@@ -1,11 +1,11 @@
 export interface StoredSession {
-  /** `bw` session key (the BW_SESSION value). */
+  /** The backend's session key (for `bw`, the BW_SESSION value). */
   key: string;
   serverUrl: string;
   email: string;
   /** Epoch ms after which the session is discarded. */
   expiresAt: number;
-  /** Epoch ms of the last sync envkit knows about, so warm reads can skip `bw status`. */
+  /** Epoch ms of the last sync envkit knows about, so warm reads can skip `status`. */
   lastSync?: number;
 }
 

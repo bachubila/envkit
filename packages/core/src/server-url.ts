@@ -2,7 +2,8 @@ import { EnvkitError } from "./errors.ts";
 
 /**
  * Normalizes a user-entered vault URL: adds `https://` when no scheme is given
- * and drops trailing slashes. Plain http is rejected because `bw` refuses it.
+ * and drops trailing slashes. Plain http is rejected: the master password hash
+ * and tokens would travel unencrypted (and `bw` refuses it too).
  */
 export function normalizeServerUrl(input: string): string {
   const trimmed = input.trim();
@@ -17,7 +18,7 @@ export function normalizeServerUrl(input: string): string {
   }
   if (url.protocol !== "https:") {
     throw new EnvkitError("The vault URL must use https://", {
-      hint: "The Bitwarden CLI refuses plain-http servers, including localhost.",
+      hint: "envkit only talks to vaults over https, including on localhost.",
     });
   }
   return `${url.origin}${url.pathname}`.replace(/\/+$/, "");

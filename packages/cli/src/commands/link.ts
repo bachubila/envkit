@@ -41,7 +41,7 @@ export const link = defineCommand({
 
     const { session, status } = await requireSession(context);
     const backend = context.backend();
-    // `bw` reads a local copy of the vault; pick up access granted since the last sync.
+    // Reads come from a local copy of the vault; pick up access granted since the last sync.
     await backend.sync(session);
     const organizations = args.org
       ? [await chooseOrganization(context, session, args.org)]

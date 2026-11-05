@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 import { createFakeBw, type FakeBw } from "../../../tools/testkit/src/fake-bw.ts";
 import {
   BwCliBackend,
-  BwError,
+  VaultError,
   compareVersions,
   CONFLICT_MESSAGE,
   EnvkitError,
@@ -308,11 +308,11 @@ describe("BwCliBackend", () => {
       "Ask an organization admin for edit access to its collection.",
     ],
     ["Something new", "bw: Something new", undefined],
-  ])("maps bw error %j", async (bwMessage, message, hint) => {
-    await bw.respond("sync", fail(bwMessage));
+  ])("maps bw error %j", async (vaultMessage, message, hint) => {
+    await bw.respond("sync", fail(vaultMessage));
     const error = await backend.sync("s").catch((caught: unknown) => caught);
-    expect(error).toBeInstanceOf(BwError);
-    expect(error).toMatchObject({ message, hint, bwMessage });
+    expect(error).toBeInstanceOf(VaultError);
+    expect(error).toMatchObject({ message, hint, vaultMessage });
   });
 
   test("unparseable output becomes an EnvkitError with bw's last stderr line", async () => {

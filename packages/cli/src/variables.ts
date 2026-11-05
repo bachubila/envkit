@@ -1,5 +1,5 @@
 import {
-  BwError,
+  VaultError,
   EnvkitError,
   githubMaskCommands,
   isGithubActions,
@@ -39,7 +39,7 @@ export interface EnvironmentData {
 
 export interface OpenProject {
   config: EnvkitConfig;
-  /** A session `bw` accepted (or, before the first call, the cached one). */
+  /** A session the backend accepted (or, before the first call, the cached one). */
   readonly session: string;
   read(environment?: string): Promise<EnvironmentData>;
 }
@@ -49,7 +49,7 @@ export interface OpenProject {
  * "always"`), otherwise only when the local copy is stale and not offline.
  *
  * With a cached session it skips `bw status` and goes straight to the work,
- * so a warm read is a single `bw` call; if `bw` rejects the session it falls
+ * so a warm read is a single backend call; if the backend rejects the session it falls
  * back to checking the status and unlocking, then retries once.
  */
 export async function openProject(
@@ -124,7 +124,7 @@ async function getEnvironmentItem(
   try {
     return await context.backend().getItem(session, itemId);
   } catch (error) {
-    if (error instanceof BwError && error.bwMessage === "Not found.") {
+    if (error instanceof VaultError && error.vaultMessage === "Not found.") {
       throw new EnvkitError(`Can't open environment "${environment}" (${error.message})`, {
         hint: "Ask an organization admin for access to its collection. If you were just given access, run `envkit sync`.",
       });

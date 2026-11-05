@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { EnvkitError } from "../errors.ts";
+import { conflictError, toError, trashedError, VaultError } from "./errors.ts";
 import type { Env } from "../paths.ts";
 import type {
   ApiKeyLoginOptions,
@@ -128,7 +129,7 @@ export class BwCliBackend implements VaultBackend {
     try {
       await this.#call(["logout"]);
     } catch (error) {
-      if (error instanceof BwError && error.bwMessage === "You are not logged in.") return;
+      if (error instanceof VaultError && error.vaultMessage === "You are not logged in.") return;
       throw error;
     }
   }
@@ -176,13 +177,7 @@ export class BwCliBackend implements VaultBackend {
   async getItem(session: string, id: string): Promise<VaultItem> {
     const raw = await this.#call<RawItem>(["get", "item", id], { session });
     // `bw get` still returns trashed items.
-    if (raw.deletedDate) {
-      throw new BwError(
-        "Not found.",
-        "Item is in the vault's trash",
-        "Restore it in the web vault.",
-      );
-    }
+    if (raw.deletedDate) throw trashedError();
     return toVaultItem(raw);
   }
 
@@ -300,62 +295,6 @@ export class BwCliBackend implements VaultBackend {
   }
 }
 
-/** A failed `bw` command, translated into an actionable message where we know one. */
-export class BwError extends EnvkitError {
-  readonly bwMessage: string;
-
-  constructor(bwMessage: string, message: string, hint?: string) {
-    super(message, { hint });
-    this.bwMessage = bwMessage;
-  }
-}
-
-export function toError(bwMessage: string, detail?: string): BwError {
-  const known: [RegExp, string, string?][] = [
-    [/^Vault is locked/, "Vault is locked", "Run `envkit unlock`."],
-    [/^You are not logged in/, "Not logged in", "Run `envkit login`."],
-    [
-      /^You are already logged in as (.+?)\.?$/,
-      "Already logged in as $1",
-      "Run `envkit logout` first.",
-    ],
-    [
-      /^Username or password is incorrect/,
-      "Email or master password is incorrect",
-      "Check both and try again.",
-    ],
-    [/decryption operation failed|Invalid master password/i, "Incorrect master password"],
-    [/^Not found/, "Item not found in the vault"],
-    [
-      /^You do not have permission to edit this item/,
-      "You can only read this environment",
-      "Ask an organization admin for edit access to its collection.",
-    ],
-    [
-      /^Logout required before server config update/,
-      "Cannot change server while logged in",
-      "Run `envkit logout` first.",
-    ],
-    [/Insecure URL not allowed/, "The vault URL must use https://"],
-  ];
-  if (/client copy of this cipher is out of date/i.test(bwMessage)) return conflictError();
-  for (const [pattern, message, hint] of known) {
-    const match = pattern.exec(bwMessage);
-    if (match) return new BwError(bwMessage, message.replace("$1", match[1] ?? ""), hint);
-  }
-  return new BwError(bwMessage, `bw: ${bwMessage}`, detail);
-}
-
-export const CONFLICT_MESSAGE = "This environment changed since envkit read it";
-
-function conflictError(): BwError {
-  return new BwError(
-    "conflict",
-    CONFLICT_MESSAGE,
-    "Someone else saved it in the meantime. Run the command again to apply your change on top of theirs.",
-  );
-}
-
 export function compareVersions(a: string, b: string): number {
   const pa = a.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
   const pb = b.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
@@ -391,7 +330,11 @@ function toVaultItem(raw: RawItem): VaultItem {
     collectionIds: raw.collectionIds ?? [],
     name: raw.name,
     notes: raw.notes ?? null,
-    fields: (raw.fields ?? []).map(({ name, value, type }) => ({ name, value, type })),
+    fields: (raw.fields ?? []).map(({ name, value, type }) => ({
+      name,
+      value: value ?? null,
+      type,
+    })),
     revisionDate: raw.revisionDate,
   };
 }

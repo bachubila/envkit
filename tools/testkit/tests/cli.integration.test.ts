@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createSessionStore } from "@envkit/core";
 import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
-import { BW_PATH, cliUser, startTestServer, type TestServer } from "./setup.ts";
+import { BACKEND_ENV, cliUser, startTestServer, type TestServer } from "./setup.ts";
 
 let server: TestServer;
 
@@ -16,7 +16,7 @@ async function cliEnv() {
   return {
     ...server.env,
     ENVKIT_HOME: await server.tempHome(),
-    ENVKIT_BW_PATH: BW_PATH,
+    ...BACKEND_ENV,
   };
 }
 

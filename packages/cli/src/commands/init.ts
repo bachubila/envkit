@@ -67,7 +67,7 @@ export const init = defineCommand({
     if (environments.length === 0) throw new EnvkitError("Give at least one environment");
 
     const { session, status } = await requireSession(context);
-    // `bw` reads a local copy of the vault; without a sync we could miss a
+    // Reads come from a local copy of the vault; without a sync we could miss a
     // collection a teammate just created and make a duplicate.
     await context.backend().sync(session);
     const organization = await chooseOrganization(context, session, args.org);

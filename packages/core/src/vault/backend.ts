@@ -63,7 +63,7 @@ export type NewVaultItem = Omit<VaultItem, "id" | "revisionDate">;
 export interface LoginOptions {
   email: string;
   password: string;
-  /** Let `bw` prompt on the terminal for anything else it needs (2FA codes, new-device OTP). */
+  /** Allow prompting on the terminal for anything else (2FA codes; `bw` backend only). */
   interactive: boolean;
 }
 

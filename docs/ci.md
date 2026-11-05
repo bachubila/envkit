@@ -7,11 +7,11 @@ envkit runs without prompts in pipelines. When `CI` is set, or you pass `--non-i
 1. **Create one vault account per project for CI**, e.g. `ci-myapp@example.com`. Don't reuse a person's account: you'd have to store their master password in CI.
 2. **Invite it to the organization and give it read-only access** (_Can view_) to only the collections it needs. Usually that's one environment, such as `myapp` → `ci` or `staging`. envkit refuses to write with read-only access, so a pipeline can't change values.
 3. **Create an API key for it.** In the web vault, log in as the CI account and open _Account settings → Security → Keys → View API key_. That gives you `client_id` (`user.…`) and `client_secret`.
-4. **Store three secrets in your CI**: `BW_CLIENTID`, `BW_CLIENTSECRET` and `ENVKIT_PASSWORD` (the CI account's master password). `bw` needs the master password to decrypt the vault, because the API key only logs in.
+4. **Store three secrets in your CI**: `BW_CLIENTID`, `BW_CLIENTSECRET` and `ENVKIT_PASSWORD` (the CI account's master password). The master password is what decrypts the vault; the API key only logs in.
 
 On the first envkit command, envkit:
 
-- logs `bw` in with the API key,
+- logs in with the API key,
 - unlocks the vault with `ENVKIT_PASSWORD`,
 - takes the server URL from the committed `.envkit.json`, or from `ENVKIT_SERVER` if you set it.
 
@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: "24"
           cache: true
-      - run: npm install --global @bitwarden/cli@2026.10.0 envkit
+      - run: npm install --global envkit
       - run: envkit run --env ci -- vp test
 ```
 
@@ -50,11 +50,15 @@ Two limits on masking:
 - Values shorter than 4 characters are not masked, because masking every `1` or `on` would make logs unreadable.
 - A multi-line value is masked line by line.
 
-**Several steps.** `bw` stays logged in for the whole job, but there's no keychain on a runner, so each envkit step unlocks the vault again, which takes a few seconds. Put the commands that need secrets in one `envkit run` step where you can, e.g. `envkit run -- sh -c "vp test && vp run e2e"`.
+**Several steps.** envkit stays logged in for the whole job, but there's no keychain on a runner, so each envkit step unlocks the vault again. That costs well under a second per step with the default backend. Put the commands that need secrets in one `envkit run` step where you can, e.g. `envkit run -- sh -c "vp test && vp run e2e"`.
 
 ## Other CI systems
 
-The setup is the same anywhere: install Node and `bw` (`@bitwarden/cli` 2026.1.0 or newer), set the three secrets as env vars, and set `CI=true` if your CI doesn't. Only the masking is GitHub-specific, so check that your CI hides secret values in its logs.
+The setup is the same anywhere: install Node.js 22.18 or newer and envkit, set the three secrets as env vars, and set `CI=true` if your CI doesn't. Only the masking is GitHub-specific, so check that your CI hides secret values in its logs.
+
+## The Bitwarden CLI backend
+
+envkit talks to the vault itself and doesn't need the Bitwarden CLI. If you set `ENVKIT_BACKEND=bw`, it drives `bw` instead. Then install `@bitwarden/cli` 2026.1.0 or newer, and expect each command to take a few seconds.
 
 ## Troubleshooting
 

@@ -204,21 +204,44 @@ What we learned (and what later phases need to know):
 - **Not verified:** that GitHub masks values sent through `::add-mask::` on **stderr**. Workflow commands are documented for stdout, though the runner reads both. Check this on the first real workflow run, and switch to stdout if it fails (stdout is the child's for `run`, so that means writing before spawning).
 - **Build fix:** core's declaration build (tsgo) used to compile the tests too, and wrote `tools/testkit/src/fake-bw.d.ts` on every build. Phase 1 had committed that file by mistake. It's deleted now, and `vp pack` uses `tsconfig.build.json` (src only).
 
-## Phase 6 — Native vault client
+## Phase 6 — Native vault client ✅
 
-Moved ahead of distribution: it decides whether users must install `bw`, which shapes packaging.
+Moved ahead of distribution: it decides whether users must install `bw`, which shapes packaging. **Decided: they don't.** The native backend is the default.
 
-- [ ] **Native TypeScript backend:** talk to the Vaultwarden API directly and implement the Bitwarden client crypto (KDF → master key → user key → org key → item decryption) with `node:crypto`. The testkit's `VaultwardenApi` already does key derivation and encryption against real Vaultwarden.
-- [ ] Encrypted local cache of the vault data, so reads need no network and no `bw` process. Target: 100–300 ms per command.
-- [ ] Tests check it against the `bw` backend on the same vault, item by item.
-- [ ] Keep `BwCliBackend` as a fallback (`ENVKIT_BACKEND=bw`) until the native one has shipped for a while.
+- [x] **Native TypeScript backend** (`packages/core/src/vault/native/`) talks to the Vaultwarden API directly. All crypto uses `node:crypto`; the flow is prelogin, KDF, master key, stretched key, user key, RSA private key, organization keys, item.
+  - **KDFs:** PBKDF2-SHA256, and Argon2id via `crypto.argon2` on Node 24.7+ (older Nodes get a clear error).
+  - **Encrypted strings:** AES-CBC types 0 and 2, and RSA-OAEP types 3 and 4. Per-item cipher keys are supported. The legacy type 0 user key is supported too.
+  - **Logins:** password and API key. API-key logins get no refresh token, so the key is stored and used to get new access tokens. A token the server rejects is refreshed and the call retried once. If the refresh fails as well, envkit forgets the login.
+- [x] **Local state:** all of it lives in `$ENVKIT_HOME/vault/`, with files at mode 600 written atomically.
+  - `state.json` holds the server, device ID, account, tokens and KDF settings, plus the keys still in encrypted form.
+  - `vault.json` is the trimmed `/api/sync` response, still encrypted the way the server returns it.
+  - Reads need no network: a warm `envkit get` takes **about 110 ms** with the built binary, against about 4 s with `bw`.
+- [x] **Sessions:** `unlock` stores the user key encrypted with a fresh random 64-byte session key and returns that key. The session key itself never touches disk; it goes to the keychain or `ENVKIT_SESSION`. A new unlock replaces the wrapped key, which invalidates older sessions, and `lock` deletes it. That matches `bw`, so the Phase 5 fallback logic works unchanged.
+- [x] **Parity tests** (`tools/testkit/tests/native.integration.test.ts`) run one vault through both backends:
+  - Items `bw` wrote are compared through native, item by item, and the reverse. Native updates a login item and `bw` still sees its username and password.
+  - Filters and search, conflict detection and trash all behave the same in both backends.
+  - Error messages match, as do the session rules, token refresh, API-key login, file modes and logout.
+  - Offline unit tests cover crypto and local reads (`packages/core/tests/native-*.test.ts`).
+- [x] **`BwCliBackend` stays as a fallback** behind `ENVKIT_BACKEND=bw`. `createBackend()` picks the backend, and `BwError` became `VaultError` (in `vault/errors.ts`), shared by both. CI runs the integration suite on the native backend for every PR, and on `bw` on main and nightly.
 
-**Done when:** the full integration suite passes with the native backend and `bw` is not installed.
+**Done when:** the full integration suite passes with the native backend and `bw` is not installed. ✅ The suite (7 files, 50 tests) passes in about 4.5 minutes, down from about 19. With the native backend, the CLI tests point `ENVKIT_BW_PATH` at a path that doesn't exist, so any command that still spawned `bw` would fail. Only the `bw` backend's own tests and the parity tests run `bw`.
+
+What we learned (and what later phases need to know):
+
+- **Vaultwarden 1.37 requires `encryptedFor`** (the user ID) on cipher create and update. Otherwise it answers with Rocket's generic 422, and only its log names the missing field.
+- **The test server needs `LOGIN_RATELIMIT_MAX_BURST` raised.** The native backend logs in fast enough to hit Vaultwarden's default of 10 logins a minute; `bw` was too slow to ever reach it.
+- **`bw` reports `revisionDate` at millisecond precision; the server stores microseconds.** The native backend normalizes to `bw`'s format for parity and compares normalized values. `lastKnownRevisionDate` goes to the server unchanged.
+- **The `bw` backend returned `undefined` for empty field values,** although `VaultField` says `null`. The parity test caught it, and it's fixed.
+- **Responses use mixed casing:** the token response is PascalCase (`Key`, `PrivateKey`, `Kdf`) and the API is camelCase. Errors arrive in `message`, `errorModel.message` or `error_description`.
+- **Two-step login is not supported natively.** The backend has no way to prompt, so it points users to API-key login or `ENVKIT_BACKEND=bw`. New-device verification (Vaultwarden with SMTP) would hit the same wall. Both are candidates for Phase 7, which would need a prompt callback in `LoginOptions`.
+- **TLS:** Node reads `NODE_EXTRA_CA_CERTS` only at startup. So when the backend's `env` sets it but the process didn't, the backend passes the CA explicitly (in-process tests, embedders).
+- **Not done:** pruning the copy when the server deletes items is covered by full syncs only (there's no delta sync), and there's no file locking between concurrent envkit processes. Each state change re-reads `state.json` first, which keeps the race window small; the worst case is one extra unlock.
 
 ## Phase 7 — Hardening and distribution
 
-- [ ] Security review: process args (no secrets in argv), temp files, file permissions on any cache, session-token lifetime, error messages that might leak values.
-- [ ] `envkit doctor`: checks `bw` version (if used), server reachability, login state, config validity and `.gitignore` coverage.
+- [ ] Security review: process args (no secrets in argv), temp files, file permissions on any cache, session-token lifetime, error messages that might leak values. Include the native backend's crypto and `$ENVKIT_HOME/vault/` (stored API keys, refresh tokens).
+- [ ] Two-step login and new-device verification for the native backend (a prompt callback in `LoginOptions`).
+- [ ] `envkit doctor`: checks the backend (and the `bw` version with `ENVKIT_BACKEND=bw`), server reachability, login state, config validity and `.gitignore` coverage.
 - [x] Integration tests against Vaultwarden in docker (`vaultwarden/server`), run in CI. Done in Phase 1 (`tools/testkit`). Extend them as each phase adds commands.
 - [ ] Manual check of interactive prompts, 2FA and the macOS/Windows keychains (see Phase 1 notes).
 - [ ] Publish to npm (`npx envkit`, `pnpm dlx envkit`). Consider single-file binaries later.
@@ -238,7 +261,7 @@ Moved ahead of distribution: it decides whether users must install `bw`, which s
 
 ## Open questions
 
-1. **Minimum `bw` version and Vaultwarden version** we support. Tests currently pin `bw` 2026.10.0 and Vaultwarden 1.37.5; `MIN_BW_VERSION` is 2026.1.0 but untested below 2026.10.0. Add a version matrix to the integration job or raise the minimum.
+1. **Minimum `bw` version and Vaultwarden version** we support. The native backend has only been tested against Vaultwarden 1.37.5, and it relies on `encryptedFor`, which older versions may reject or ignore. Tests currently pin `bw` 2026.10.0 and Vaultwarden 1.37.5; `MIN_BW_VERSION` is 2026.1.0 but untested below 2026.10.0. Add a version matrix to the integration job or raise the minimum.
 2. **Session storage:** Phase 1 uses the OS keychain and falls back to "prompt every time" when there is none. Confirm that fallback is acceptable, or add an opt-in encrypted file store.
 3. ~~**Environment layout default:**~~ Resolved in Phase 2: one collection per project by default; `env add --collection` puts an environment in its own collection.
 4. ~~**Package name:**~~ Resolved: `envkit` is free on npm (checked 2026-11-03). The library is `@envkit/core`, so we need to claim the `@envkit` npm scope before publishing.

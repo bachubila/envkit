@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_FILE, type EnvkitConfig } from "@envkit/core";
 import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test";
-import { BW_PATH, cliUser, startTestServer, type TestServer } from "./setup.ts";
+import { BACKEND_ENV, cliUser, startTestServer, type TestServer } from "./setup.ts";
 
 const BIN = fileURLToPath(new URL("../../../packages/cli/src/bin.ts", import.meta.url));
 
@@ -43,7 +43,7 @@ describe("CI: a fresh runner with only env vars", () => {
       env: {
         ...server.env,
         ENVKIT_HOME: await server.tempHome(),
-        ENVKIT_BW_PATH: BW_PATH,
+        ...BACKEND_ENV,
         // Runners have no keychain; keep this machine's out of it.
         ENVKIT_SESSION_STORE: "memory",
         CI: "true",
@@ -99,8 +99,8 @@ describe("CI: a fresh runner with only env vars", () => {
   });
 });
 
-describe("cached sessions against the real bw", () => {
-  test("a warm read skips bw status, and a session bw rejects falls back to unlocking", async () => {
+describe("cached sessions against a real vault", () => {
+  test("a warm read trusts the cached session, and one the vault rejects falls back to unlocking", async () => {
     const account = await server.register("dana");
     await server.api.createOrganization(account, "Dana's");
     const dana = await cliUser(server, account);

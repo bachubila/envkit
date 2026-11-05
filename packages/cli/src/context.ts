@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
-  BwCliBackend,
+  createBackend,
   createSessionStore,
   EnvkitError,
   envkitHome,
@@ -114,7 +114,7 @@ export function createContext(overrides: Partial<CliContext> = {}): CliContext {
     readStdin: readProcessStdin,
     interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY) && !env.CI,
     prompt: clackPrompter,
-    backend: () => (backend ??= BwCliBackend.fromEnv(env, home)),
+    backend: () => (backend ??= createBackend(env, home)),
     sessions: () =>
       (sessions ??= (
         env.ENVKIT_SESSION_STORE === "memory"

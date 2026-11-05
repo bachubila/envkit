@@ -4,8 +4,9 @@ import { join } from "node:path";
 export type Env = Record<string, string | undefined>;
 
 /**
- * Directory where envkit keeps its own state (including its private `bw` data
- * dir). `ENVKIT_HOME` overrides it, which tests rely on.
+ * Directory where envkit keeps its own state: the native backend's `vault/`
+ * (account, tokens, encrypted vault copy) or the `bw` backend's private data
+ * dir. `ENVKIT_HOME` overrides it, which tests rely on.
  */
 export function envkitHome(env: Env = process.env, platform = process.platform): string {
   if (env.ENVKIT_HOME) return env.ENVKIT_HOME;

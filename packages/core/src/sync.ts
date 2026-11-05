@@ -1,7 +1,7 @@
 export const DEFAULT_SYNC_INTERVAL_MINUTES = 5;
 
 /**
- * Whether `bw`'s local copy of the vault is old enough to sync before reading.
+ * Whether the local copy of the vault is old enough to sync before reading.
  * A teammate's change shows up after at most one interval (or `envkit sync`).
  */
 export function needsSync(

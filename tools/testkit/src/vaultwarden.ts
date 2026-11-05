@@ -52,6 +52,9 @@ export async function startVaultwarden(): Promise<Vaultwarden> {
     "I_REALLY_WANT_VOLATILE_STORAGE=true",
     "--env",
     "SIGNUPS_ALLOWED=true",
+    // Tests log in far more often than people do (10 per minute by default).
+    "--env",
+    "LOGIN_RATELIMIT_MAX_BURST=1000",
     "--env",
     'ROCKET_TLS={certs="/tls/cert.pem",key="/tls/key.pem"}',
     "--volume",

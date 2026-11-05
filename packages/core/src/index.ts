@@ -39,13 +39,13 @@ export {
 export {
   BW_INSTALL_HINT,
   BwCliBackend,
-  BwError,
   compareVersions,
-  CONFLICT_MESSAGE,
   MIN_BW_VERSION,
-  toError,
   type BwCliOptions,
 } from "./vault/bw-cli.ts";
+export { CONFLICT_MESSAGE, toError, VaultError } from "./vault/errors.ts";
+export { BACKENDS, createBackend } from "./vault/create.ts";
+export { NativeBackend, type NativeBackendOptions } from "./vault/native/backend.ts";
 export {
   DEFAULT_SESSION_IDLE_MINUTES,
   idleTimeoutFromEnv,
