@@ -2,9 +2,12 @@ import {
   VaultError,
   CONFIG_FILE,
   EnvkitError,
+  isEnvkitError,
   loadConfig,
   validateEnvironmentName,
+  verifyEnvironmentItem,
   writeConfig,
+  type EnvkitConfig,
   type Organization,
 } from "@envkit/core";
 import { defineCommand } from "citty";
@@ -33,10 +36,11 @@ const list = defineCommand({
       let detail: string;
       try {
         const item = await backend.getItem(session, ref.itemId);
+        verifyEnvironmentItem(item, environmentOf(config, name));
         const count = item.fields.length;
         detail = `${count} variable${count === 1 ? "" : "s"}`;
       } catch (error) {
-        if (!(error instanceof VaultError)) throw error;
+        if (!(error instanceof VaultError) && !isEnvkitError(error)) throw error;
         unreachable++;
         detail = `not accessible (${error.message})`;
       }
@@ -142,7 +146,12 @@ const remove = defineCommand({
     if (args.delete) {
       const { session, status } = await requireSession(context);
       warnOnServerMismatch(context, config, status);
-      await context.backend().deleteItem(session, ref.itemId);
+      const backend = context.backend();
+      verifyEnvironmentItem(
+        await backend.getItem(session, ref.itemId),
+        environmentOf(config, environment),
+      );
+      await backend.deleteItem(session, ref.itemId);
       context.output.stdout(`Moved the "${environment}" item to the vault's trash.`);
     }
 
@@ -177,4 +186,14 @@ async function findProjectOrganization(
     });
   }
   return organization;
+}
+
+/** What an environment's item must match (see verifyEnvironmentItem). */
+function environmentOf(config: EnvkitConfig, environment: string) {
+  return {
+    organizationId: config.organizationId,
+    collectionId: config.environments[environment]!.collectionId,
+    project: config.project,
+    environment,
+  };
 }

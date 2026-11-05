@@ -55,3 +55,33 @@ export function parseEnvironmentItem(
   const environment = meta.get("environment");
   return project && environment ? { project, environment } : undefined;
 }
+
+/**
+ * Checks that the item `.envkit.json` points at really is this project's
+ * environment: in the project's organization and the environment's
+ * collection, with matching envkit notes. `.envkit.json` is committed, so
+ * anyone who can push could otherwise point a teammate's reads (and writes)
+ * at an item of their choosing.
+ */
+export function verifyEnvironmentItem(
+  item: Pick<VaultItem, "organizationId" | "collectionIds" | "notes">,
+  expected: { organizationId: string; collectionId: string; project: string; environment: string },
+): void {
+  const meta = parseEnvironmentItem(item);
+  if (
+    item.organizationId === expected.organizationId &&
+    item.collectionIds.includes(expected.collectionId) &&
+    meta?.project === expected.project &&
+    meta.environment === expected.environment
+  ) {
+    return;
+  }
+  throw new EnvkitError(
+    `.envkit.json points "${expected.environment}" at a vault item that isn't ${environmentItemName(expected.project, expected.environment)}`,
+    {
+      hint:
+        "Check who changed .envkit.json (`git log -p .envkit.json`). " +
+        `To restore it from the vault, run \`envkit link ${expected.project} --force\`.`,
+    },
+  );
+}

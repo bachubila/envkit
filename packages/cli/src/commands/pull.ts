@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
-import { chmod, writeFile } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { rename, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { formatVariables, OUTPUT_FORMATS, type OutputFormat } from "@envkit/core";
 import { defineCommand } from "citty";
@@ -41,8 +42,7 @@ export const pull = defineCommand({
     }
 
     const path = isAbsolute(args.out) ? args.out : resolve(context.cwd, args.out);
-    await writeFile(path, text, { mode: 0o600 });
-    await chmod(path, 0o600);
+    await writePrivateFile(path, text);
     const shown = relative(context.cwd, path) || path;
     context.output.stderr(
       `Wrote ${variables.size} variable${variables.size === 1 ? "" : "s"} from "${environment}" to ${shown}.`,
@@ -54,6 +54,22 @@ export const pull = defineCommand({
     }
   },
 });
+
+/**
+ * Writes a new file with mode 600 from the start, then renames it over `path`.
+ * An existing file never holds the secrets with its old permissions, and a
+ * symlink at `path` is replaced rather than followed.
+ */
+async function writePrivateFile(path: string, text: string): Promise<void> {
+  const temp = join(dirname(path), `.${basename(path)}.${randomUUID().slice(0, 8)}.tmp`);
+  try {
+    await writeFile(temp, text, { mode: 0o600, flag: "wx" });
+    await rename(temp, path);
+  } catch (error) {
+    await rm(temp, { force: true });
+    throw error;
+  }
+}
 
 const exec = promisify(execFile);
 

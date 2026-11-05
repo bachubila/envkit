@@ -19,6 +19,7 @@ import type {
 } from "../backend.ts";
 import { conflictError, toError, trashedError, type VaultError } from "../errors.ts";
 import {
+  assertStrongKdf,
   DecryptionError,
   decrypt,
   decryptRsa,
@@ -114,6 +115,7 @@ export class NativeBackend implements VaultBackend {
       memory: prelogin.kdfMemory,
       parallelism: prelogin.kdfParallelism,
     };
+    assertStrongKdf(kdf);
     const masterKey = await deriveMasterKey(password, normalized, kdf);
     const token = await this.#requestToken(
       state,

@@ -239,7 +239,24 @@ What we learned (and what later phases need to know):
 
 ## Phase 7 — Hardening and distribution
 
-- [ ] Security review: process args (no secrets in argv), temp files, file permissions on any cache, session-token lifetime, error messages that might leak values. Include the native backend's crypto and `$ENVKIT_HOME/vault/` (stored API keys, refresh tokens).
+- [x] **Security review** (first pass, 2026-11-05).
+  - **Fixed, with regression tests** in `packages/cli/tests/security.test.ts` and `native-crypto.test.ts`:
+    - **High: `.envkit.json` decided which item envkit used, unchecked.** The file is committed, so anyone who can push could point a teammate's reads, and their `set`/`push` writes, at an item they control. `env remove --delete` could trash any item the victim could edit. Now `verifyEnvironmentItem` checks the item's organization, collection and envkit notes (project and environment) before every read, write and delete.
+    - **Medium: the server chose the KDF settings the native client used for the password hash it sends.** A malicious server could ask for 1 iteration and get a hash that's cheap to crack. envkit now refuses settings below Bitwarden's minimums: PBKDF2 at 100k iterations; Argon2id at 2 iterations, 16 MiB and 1 thread.
+    - **Medium: `pull --out` wrote secrets into an existing file before fixing its mode,** and it followed symlinks. It now writes a new 600-mode file and renames it into place.
+    - **Low: `envkit run` passed `BW_CLIENTID`, `BW_CLIENTSECRET` and `BW_SESSION` to the child.** They're now stripped, as `ENVKIT_PASSWORD` and `ENVKIT_SESSION` already were.
+    - **Low: an invalid field name was printed raw in warnings,** so it could carry terminal escape sequences. It's now JSON-quoted.
+  - **Checked and fine:**
+    - No secret travels in argv. `bw` gets passwords through env vars and items on stdin.
+    - TLS is always verified. The client doesn't follow redirects, and URLs must be https.
+    - State files are 600 and written atomically. The session key is never written to disk.
+    - Variable names are validated before they reach shell or dotenv output, and both formats quote values.
+    - GitHub masking runs before any value is printed. There's no value expansion anywhere.
+  - **Open (decisions needed):**
+    - **High: vault values can set `NODE_OPTIONS`, `LD_PRELOAD`, `DYLD_*`, `PATH`, `BASH_ENV` and similar.** Anyone with write access to an environment can then run code on every machine and CI job that does `envkit run` or evals `pull --format shell`. Proposal: refuse such names by default and allow them per name (`--allow NAME` or `ENVKIT_ALLOW_VARIABLES`).
+    - **Medium: CI auto-login takes the server from the committed `.envkit.json`** when `ENVKIT_SERVER` isn't set. A change to that file in a job that has the secrets would send the API key, or a master password hash, to another server. The KDF minimums keep that hash expensive to crack. Proposal: require `ENVKIT_SERVER` for auto-login, or at least recommend it in `docs/ci.md`.
+    - **Low: an API-key login stores the client secret, and a password login the refresh token, in `$ENVKIT_HOME/vault/state.json`** (mode 600), as `bw` does. They could move to the keychain.
+    - **Low:** `envkit set KEY=value` leaves the value in shell history; the stdin form is documented in the error hint only. `ENVKIT_SESSION` never idles out. HTTP responses have no size limit.
 - [ ] Two-step login and new-device verification for the native backend (a prompt callback in `LoginOptions`).
 - [ ] `envkit doctor`: checks the backend (and the `bw` version with `ENVKIT_BACKEND=bw`), server reachability, login state, config validity and `.gitignore` coverage.
 - [x] Integration tests against Vaultwarden in docker (`vaultwarden/server`), run in CI. Done in Phase 1 (`tools/testkit`). Extend them as each phase adds commands.

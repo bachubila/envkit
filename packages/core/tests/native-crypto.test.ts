@@ -8,6 +8,7 @@ import {
 } from "node:crypto";
 import { describe, expect, test } from "vite-plus/test";
 import {
+  assertStrongKdf,
   DecryptionError,
   decrypt,
   decryptRsa,
@@ -104,5 +105,31 @@ describe("key derivation", () => {
     await expect(
       deriveMasterKey("pw", "a@example.test", { type: 9, iterations: 1 }),
     ).rejects.toMatchObject({ hint: expect.stringContaining("ENVKIT_BACKEND=bw") });
+  });
+});
+
+describe("KDF minimums", () => {
+  test("refuses settings a server could pick to make the hash cheap to crack", () => {
+    for (const weak of [
+      { type: KdfType.Pbkdf2, iterations: 99_999 },
+      { type: KdfType.Pbkdf2, iterations: 1 },
+      { type: KdfType.Argon2id, iterations: 1, memory: 64, parallelism: 4 },
+      { type: KdfType.Argon2id, iterations: 3, memory: 15, parallelism: 4 },
+      { type: KdfType.Argon2id, iterations: 3, memory: 64, parallelism: 0 },
+    ]) {
+      expect(() => assertStrongKdf(weak), JSON.stringify(weak)).toThrow(
+        "The server asked for unsafely weak key derivation settings",
+      );
+    }
+  });
+
+  test("accepts Bitwarden's defaults and the legacy 100k", () => {
+    for (const ok of [
+      { type: KdfType.Pbkdf2, iterations: 600_000 },
+      { type: KdfType.Pbkdf2, iterations: 100_000 },
+      { type: KdfType.Argon2id, iterations: 3, memory: 64, parallelism: 4 },
+    ]) {
+      expect(() => assertStrongKdf(ok)).not.toThrow();
+    }
   });
 });

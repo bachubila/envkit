@@ -16,6 +16,7 @@ export {
   environmentItemNotes,
   ITEM_MARKER,
   parseEnvironmentItem,
+  verifyEnvironmentItem,
   validateEnvironmentName,
   validateProjectName,
 } from "./project.ts";

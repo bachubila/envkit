@@ -33,7 +33,9 @@ beforeEach(async () => {
     ok({
       id: "item-1",
       name: "myapp/dev",
-      notes: "envkit:v1",
+      organizationId: "org-1",
+      collectionIds: ["c1"],
+      notes: "envkit:v1\nproject=myapp\nenvironment=dev",
       revisionDate: "2026-11-04T00:00:00.000Z",
       fields: [{ name: "GREETING", value: "hello from the vault", type: 1 }],
     }),

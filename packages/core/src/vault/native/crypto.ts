@@ -28,6 +28,32 @@ export class DecryptionError extends Error {
   override readonly name = "DecryptionError";
 }
 
+/**
+ * The weakest settings envkit derives a password hash with, as Bitwarden's
+ * clients enforce. The server picks the settings at login, so without these a
+ * malicious or compromised server could ask for a hash that's cheap to crack.
+ */
+export const KDF_MINIMUMS = { pbkdf2Iterations: 100_000, argon2Iterations: 2, argon2MemoryMiB: 16 };
+
+export function assertStrongKdf(kdf: KdfConfig): void {
+  const weak =
+    kdf.type === KdfType.Pbkdf2
+      ? kdf.iterations < KDF_MINIMUMS.pbkdf2Iterations
+      : kdf.type === KdfType.Argon2id
+        ? kdf.iterations < KDF_MINIMUMS.argon2Iterations ||
+          (kdf.memory ?? 0) < KDF_MINIMUMS.argon2MemoryMiB ||
+          (kdf.parallelism ?? 0) < 1
+        : false;
+  if (weak) {
+    throw new EnvkitError("The server asked for unsafely weak key derivation settings", {
+      hint:
+        "envkit won't send a password hash derived with them. If this is your server, raise the " +
+        "account's KDF settings in the web vault (Account settings → Security → Keys); otherwise " +
+        "check that you're logging in to the right server.",
+    });
+  }
+}
+
 /** The 32-byte master key: KDF(master password, email). */
 export async function deriveMasterKey(
   password: string,

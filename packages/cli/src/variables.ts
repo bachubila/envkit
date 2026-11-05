@@ -10,6 +10,7 @@ import {
   syncIntervalFromEnv,
   type EnvironmentRef,
   type EnvkitConfig,
+  verifyEnvironmentItem,
   type VaultItem,
 } from "@envkit/core";
 import type { CliContext } from "./context.ts";
@@ -93,6 +94,12 @@ export async function openProject(
       const item = await withSession((session) =>
         getEnvironmentItem(context, session, ref.name, ref.itemId),
       );
+      verifyEnvironmentItem(item, {
+        organizationId: config.organizationId,
+        collectionId: ref.collectionId,
+        project: config.project,
+        environment: ref.name,
+      });
       const { variables, warnings } = readVariables(item);
       for (const warning of warnings) context.output.stderr(`warning: ${warning}`);
       // Before any value can reach the job log. Workflow commands work on stderr too.

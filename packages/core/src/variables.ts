@@ -23,7 +23,8 @@ export function readVariables(item: Pick<VaultItem, "fields">): ReadVariablesRes
   for (const field of item.fields) {
     const name = field.name?.trim() ?? "";
     if (!isValidVariableName(name)) {
-      warnings.push(`skipping field "${field.name}": not a valid variable name`);
+      // JSON quoting escapes control characters, so a field name can't drive the terminal.
+      warnings.push(`skipping field ${JSON.stringify(field.name)}: not a valid variable name`);
       continue;
     }
     if (
@@ -43,8 +44,17 @@ export function readVariables(item: Pick<VaultItem, "fields">): ReadVariablesRes
   return { variables, warnings };
 }
 
-/** envkit's own secrets, never passed on to commands it runs. */
-export const PRIVATE_ENV = ["ENVKIT_PASSWORD", "ENVKIT_SESSION"] as const;
+/**
+ * Login secrets, never passed on to commands envkit runs: envkit's own, and
+ * the Bitwarden API key and session it may log in with.
+ */
+export const PRIVATE_ENV = [
+  "ENVKIT_PASSWORD",
+  "ENVKIT_SESSION",
+  "BW_CLIENTID",
+  "BW_CLIENTSECRET",
+  "BW_SESSION",
+] as const;
 
 /**
  * The environment for a child process: `base` (without envkit's secrets) plus
