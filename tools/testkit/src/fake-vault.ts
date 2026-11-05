@@ -165,6 +165,7 @@ export class FakeVault implements VaultBackend {
 
   async getItem(session: string, id: string): Promise<VaultItem> {
     this.#requireSession(session);
+    this.calls.push(`getItem ${id}`);
     const item = this.items.get(id);
     if (!item) throw toError("Not found.");
     return structuredClone(item);

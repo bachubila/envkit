@@ -12,6 +12,7 @@ export const sync = defineCommand({
     await requireLogin(context);
     // `bw sync` only needs the login, not an unlocked vault.
     await context.backend().sync(context.env.ENVKIT_SESSION ?? "");
+    await (await context.sessions()).recordSync();
     context.output.stdout("Synced.");
   },
 });

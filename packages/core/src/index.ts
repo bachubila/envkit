@@ -76,3 +76,4 @@ export {
   type ReadVariablesResult,
   type VariableChanges,
 } from "./variables.ts";
+export { githubMaskCommands, isGithubActions, MIN_MASKED_LENGTH } from "./ci.ts";

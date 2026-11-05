@@ -4,12 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 3 * * *" # nightly integration run
 
 permissions:
   contents: read
 
 jobs:
   ready:
+    if: github.event_name != 'schedule'
     name: check, test, build (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     strategy:
@@ -31,6 +34,8 @@ jobs:
 
   integration:
     name: integration (bw + Vaultwarden in Docker)
+    # About 15 minutes, so not on every pull request.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1

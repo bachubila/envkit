@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { join } from "node:path";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { EnvkitError } from "../errors.ts";
 import type { Env } from "../paths.ts";
 import type {
@@ -34,6 +35,11 @@ export interface BwCliOptions {
   appDataDir: string;
   /** Base environment for `bw` child processes. Defaults to `process.env`. */
   env?: Env;
+  /**
+   * File that remembers the checked `bw` version, keyed by the executable's
+   * path, size and mtime, so most commands skip `bw --version` (about 1 s).
+   */
+  versionCachePath?: string;
 }
 
 interface ExecOptions {
@@ -55,12 +61,14 @@ export class BwCliBackend implements VaultBackend {
   readonly #bwPath: string;
   readonly #appDataDir: string;
   readonly #env: Env;
+  readonly #versionCachePath: string | undefined;
   #versionCheck: Promise<void> | undefined;
 
   constructor(options: BwCliOptions) {
     this.#bwPath = options.bwPath ?? "bw";
     this.#appDataDir = options.appDataDir;
     this.#env = options.env ?? process.env;
+    this.#versionCachePath = options.versionCachePath;
   }
 
   static fromEnv(env: Env, envkitHome: string): BwCliBackend {
@@ -68,6 +76,7 @@ export class BwCliBackend implements VaultBackend {
       bwPath: env.ENVKIT_BW_PATH,
       appDataDir: join(envkitHome, "bw"),
       env,
+      versionCachePath: join(envkitHome, "bw-version.json"),
     });
   }
 
@@ -225,15 +234,37 @@ export class BwCliBackend implements VaultBackend {
   }
 
   #ensureVersion(): Promise<void> {
-    this.#versionCheck ??= this.#exec(["--version"]).then(({ stdout }) => {
-      const version = stdout.trim();
-      if (compareVersions(version, MIN_BW_VERSION) < 0) {
-        throw new EnvkitError(`bw ${version} is too old; envkit needs ${MIN_BW_VERSION} or newer`, {
-          hint: BW_INSTALL_HINT,
-        });
-      }
-    });
+    this.#versionCheck ??= this.#checkVersion();
     return this.#versionCheck;
+  }
+
+  async #checkVersion(): Promise<void> {
+    const cachePath = this.#versionCachePath;
+    const fingerprint = cachePath
+      ? await executableFingerprint(this.#bwPath, this.#env)
+      : undefined;
+    if (cachePath && fingerprint) {
+      const cached = await readJson<{ fingerprint?: string; version?: string }>(cachePath);
+      if (
+        cached?.fingerprint === fingerprint &&
+        typeof cached.version === "string" &&
+        compareVersions(cached.version, MIN_BW_VERSION) >= 0
+      ) {
+        return;
+      }
+    }
+    const version = (await this.#exec(["--version"])).stdout.trim();
+    if (compareVersions(version, MIN_BW_VERSION) < 0) {
+      throw new EnvkitError(`bw ${version} is too old; envkit needs ${MIN_BW_VERSION} or newer`, {
+        hint: BW_INSTALL_HINT,
+      });
+    }
+    if (cachePath && fingerprint) {
+      // Only a speed-up: a cache that can't be written just means checking next time.
+      await mkdir(dirname(cachePath), { recursive: true })
+        .then(() => writeFile(cachePath, JSON.stringify({ fingerprint, version })))
+        .catch(() => {});
+    }
   }
 
   #exec(
@@ -404,4 +435,42 @@ interface RawItem {
   revisionDate: string;
   deletedDate?: string | null;
   [key: string]: unknown;
+}
+
+/**
+ * Identifies the installed `bw` (real path, size, mtime), or undefined when it
+ * can't be found. An upgrade changes the size or mtime, so the version is checked again.
+ */
+async function executableFingerprint(command: string, env: Env): Promise<string | undefined> {
+  const candidates =
+    isAbsolute(command) || command.includes("/") || command.includes("\\")
+      ? [command]
+      : (env.PATH ?? env.Path ?? "")
+          .split(delimiter)
+          .filter(Boolean)
+          .flatMap((dir) => executableNames(command, env).map((name) => join(dir, name)));
+  for (const candidate of candidates) {
+    try {
+      const path = await realpath(candidate);
+      const info = await stat(path);
+      if (info.isFile()) return `${path}:${info.size}:${info.mtimeMs}`;
+    } catch {
+      // Not in this directory.
+    }
+  }
+  return undefined;
+}
+
+function executableNames(command: string, env: Env): string[] {
+  if (process.platform !== "win32") return [command];
+  const extensions = (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
+  return [command, ...extensions.map((extension) => command + extension.toLowerCase())];
+}
+
+async function readJson<T>(path: string): Promise<T | undefined> {
+  try {
+    return JSON.parse(await readFile(path, "utf8")) as T;
+  } catch {
+    return undefined;
+  }
 }

@@ -126,6 +126,15 @@ export class VaultwardenApi {
     );
   }
 
+  /** The account's personal API key, as BW_CLIENTID / BW_CLIENTSECRET for `bw login --apikey`. */
+  async apiKey(account: TestAccount): Promise<{ clientId: string; clientSecret: string }> {
+    const profile = await this.#api<{ id: string }>(account, "GET", "/api/accounts/profile");
+    const key = await this.#api<{ apiKey: string }>(account, "POST", "/api/accounts/api-key", {
+      masterPasswordHash: account.masterPasswordHash,
+    });
+    return { clientId: `user.${profile.id}`, clientSecret: key.apiKey };
+  }
+
   async #api<T = unknown>(
     account: TestAccount,
     method: string,

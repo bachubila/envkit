@@ -106,7 +106,7 @@ describe("envkit login", () => {
 
 describe("envkit unlock", () => {
   test("not logged in", async () => {
-    const { envkit } = harness();
+    const { envkit } = harness({ interactive: true });
     const result = await envkit("unlock");
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("Not logged in\nRun `envkit login`.");

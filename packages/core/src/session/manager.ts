@@ -1,5 +1,5 @@
 import type { VaultStatus } from "../vault/backend.ts";
-import type { SessionStore } from "./store.ts";
+import type { SessionStore, StoredSession } from "./store.ts";
 
 export const DEFAULT_SESSION_IDLE_MINUTES = 60;
 
@@ -46,6 +46,21 @@ export class SessionManager {
     return stored.key;
   }
 
+  /**
+   * The cached session if it hasn't idled out, without checking it against
+   * `bw status`. Callers must be ready for `bw` to reject it.
+   */
+  async peek({ touch = true }: { touch?: boolean } = {}): Promise<StoredSession | undefined> {
+    const stored = await this.store.get();
+    if (!stored) return undefined;
+    if (stored.expiresAt <= this.#now()) {
+      await this.store.delete();
+      return undefined;
+    }
+    if (touch) await this.store.set({ ...stored, expiresAt: this.#now() + this.idleTimeoutMs });
+    return stored;
+  }
+
   async save(key: string, status: VaultStatus): Promise<void> {
     if (!status.serverUrl || !status.email) return;
     await this.store.set({
@@ -53,7 +68,14 @@ export class SessionManager {
       serverUrl: status.serverUrl,
       email: status.email,
       expiresAt: this.#now() + this.idleTimeoutMs,
+      ...(status.lastSync ? { lastSync: status.lastSync.getTime() } : {}),
     });
+  }
+
+  /** Remembers that the vault was just synced. */
+  async recordSync(): Promise<void> {
+    const stored = await this.store.get();
+    if (stored) await this.store.set({ ...stored, lastSync: this.#now() });
   }
 
   async expiresAt(): Promise<Date | undefined> {

@@ -58,6 +58,37 @@ describe("SessionManager", () => {
     expect(await manager.get({ ...alice, serverUrl: "https://other.test" })).toBeUndefined();
   });
 
+  test("peek returns the stored session with its account and last sync, without a status", async () => {
+    const { manager, advance } = setup();
+    await manager.save("key", { ...alice, lastSync: new Date(900_000) });
+    expect(await manager.peek()).toMatchObject({
+      key: "key",
+      email: "alice@example.test",
+      lastSync: 900_000,
+    });
+    advance(30_000);
+    await manager.recordSync();
+    expect((await manager.peek())?.lastSync).toBe(1_030_000);
+  });
+
+  test("peek drops an idle session and extends a live one", async () => {
+    const { manager, advance } = setup();
+    await manager.save("key", alice);
+    advance(50_000);
+    expect(await manager.peek()).toBeDefined();
+    advance(50_000);
+    expect(await manager.peek()).toBeDefined();
+    advance(60_000);
+    expect(await manager.peek()).toBeUndefined();
+    expect(await manager.get(alice)).toBeUndefined();
+  });
+
+  test("recordSync without a session does nothing", async () => {
+    const { manager } = setup();
+    await manager.recordSync();
+    expect(await manager.peek()).toBeUndefined();
+  });
+
   test("clear forgets the session", async () => {
     const { manager } = setup();
     await manager.save("key", alice);
@@ -96,6 +127,16 @@ describe("KeyringSessionStore", () => {
     expect(await store.get()).toBeUndefined();
     entry.corrupt(JSON.stringify({ key: 1 }));
     expect(await store.get()).toBeUndefined();
+  });
+
+  test("keeps lastSync and ignores a malformed one", async () => {
+    const entry = fakeEntry();
+    const store = new KeyringSessionStore(entry);
+    const session = { key: "k", serverUrl: "https://v", email: "a@b", expiresAt: 5 };
+    entry.corrupt(JSON.stringify({ ...session, lastSync: 4 }));
+    expect(await store.get()).toEqual({ ...session, lastSync: 4 });
+    entry.corrupt(JSON.stringify({ ...session, lastSync: "yesterday" }));
+    expect(await store.get()).toEqual(session);
   });
 });
 

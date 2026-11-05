@@ -1,0 +1,6 @@
+{
+  // Declarations for the published package only; tests import the testkit
+  // from outside this package, and tsgo would emit .d.ts files next to it.
+  "extends": "./tsconfig.json",
+  "include": ["src"]
+}

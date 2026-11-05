@@ -23,6 +23,13 @@ export const main = defineCommand({
     version: pkg.version,
     description: "Share environment variables with your team through a self-hosted Vaultwarden.",
   },
+  args: {
+    // Handled by run() for every command; listed here for `envkit --help`.
+    "non-interactive": {
+      type: "boolean",
+      description: "Never prompt; fail with a hint instead (the default when CI is set)",
+    },
+  },
   subCommands: {
     run: runCommand,
     pull,

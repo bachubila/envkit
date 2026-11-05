@@ -35,7 +35,7 @@ packages/
 tools/
   testkit/  # private: fake `bw`, in-memory FakeVault, disposable Vaultwarden, integration tests
 apps/
-  website/  # existing starter, later becomes the docs site (Phase 7)
+  website/  # existing starter, later becomes the docs site (Phase 8)
 ```
 
 Both packages use `vp pack` for builds, `vp test` (Vitest) for tests, `vp check` for format, lint and types.
@@ -89,9 +89,9 @@ What we learned (and what later phases need to know):
 - **`bw sync` works while the vault is locked.** It only needs the login token. Reading data needs the session.
 - **Item updates re-read the full item**, because `bw edit` replaces the whole item. Fields envkit doesn't own are kept.
 - **Vaultwarden 1.37 removed the legacy `/identity/accounts/register` route.** The test kit registers accounts through `register/send-verification-email` + `register/finish`, doing the client-side crypto itself. `bw` can't create organizations either, so **Phase 2 needs a similar test helper to create an org and collections**.
-- `bw` calls are slow (about 1–3 s each because of Node startup and KDF), and `requireSession` costs two of them before any real work. If this becomes painful, cache the status per run or move to the native backend (Phase 7).
+- `bw` calls are slow (about 1–3 s each because of Node startup and KDF), and `requireSession` costs two of them before any real work. If this becomes painful, cache the status per run or move to the native backend (Phase 6).
 - **Env vars added:** `ENVKIT_HOME`, `ENVKIT_BW_PATH`, `ENVKIT_SERVER`, `ENVKIT_EMAIL`, `ENVKIT_PASSWORD`, `ENVKIT_SESSION`, `ENVKIT_SESSION_IDLE_MINUTES` (plus `BW_CLIENTID` / `BW_CLIENTSECRET`). Phase 5 builds on these.
-- **Not verified yet:** the interactive prompts in a real terminal (`@clack/prompts`), `bw`'s 2FA prompts, and the macOS and Windows keychains. Check them by hand before release (Phase 6).
+- **Not verified yet:** the interactive prompts in a real terminal (`@clack/prompts`), `bw`'s 2FA prompts, and the macOS and Windows keychains. Check them by hand before release (Phase 7).
 
 ## Phase 2 — Project linking ✅
 
@@ -134,7 +134,7 @@ What we learned (and what later phases need to know):
 - **Field → variable rules:** text, hidden and boolean custom fields become variables (an empty value becomes `""`). Invalid names (`my key`, `1ST`) and linked fields are skipped with a warning; for duplicate names the last field wins, also with a warning. Phase 4's `set` must refuse invalid names up front.
 - **`.env` quoting is checked against the `dotenv` package.** dotenv keeps single- and backtick-quoted text literally (real newlines included) and only expands `\n`/`\r` inside double quotes, with no other escapes. envkit picks bare → `'…'` → `` `…` `` → `"…"` and **refuses** values no form can hold exactly (quotes of every kind mixed with line breaks), pointing at `--format json|shell`. Shell output uses POSIX single quotes and round-trips through `sh` in tests.
 - **`ENVKIT_SESSION_STORE=memory`** (new) keeps envkit out of the OS keychain. The integration tests use it for spawned binaries; it's also useful on shared machines.
-- **Latency:** each read costs about 3–4 `bw` processes (status, status with session, maybe sync, get item), so 3–6 s per `envkit run`. That's acceptable for starting a dev server, slow for scripts calling `envkit get` in a loop (use `pull --format shell` once instead). This is the main argument for Phase 7's native backend; a cheaper fix is skipping the second `status` call when the cached session was validated recently.
+- **Latency:** each read costs about 3–4 `bw` processes (status, status with session, maybe sync, get item), so 3–6 s per `envkit run`. That's acceptable for starting a dev server, slow for scripts calling `envkit get` in a loop (use `pull --format shell` once instead). This is the main argument for the native backend (now Phase 6); a cheaper fix is skipping the second `status` call when the cached session was validated recently.
 - **The integration suite now takes about 10 minutes** (4 files, each starting its own Vaultwarden, plus slow `bw` calls). Before it grows further, share one server per run through a Vitest `globalSetup`.
 - **Not done:** Windows support in `run` (`.cmd` shims need `shell: true` or cross-spawn), and loading a `.env` file _and_ the vault together.
 
@@ -156,25 +156,69 @@ What we learned (and what later phases need to know):
 - **Vaultwarden rejects stale writes** with "The client copy of this cipher is out of date…". The revisionDate check is still worth having: it gives a clearer error and catches changes without a round trip that fails.
 - **Read-only members** get "You do not have permission to edit this item" from the server. Unlike the collection-create 401, `bw` stays logged in. envkit maps it to "You can only read this environment" with a hint to ask an admin.
 - **A member's local copy stays stale until a sync.** Newly granted access, or a teammate's write, is invisible for up to `ENVKIT_SYNC_INTERVAL_MINUTES`. Writes sync anyway; for reads, `envkit sync` is the answer and the hint on "not found" errors says so.
-- **The integration suite shares one Vaultwarden** through Vitest `globalSetup` (`project.provide`/`inject`). It still takes about 15 minutes for 5 files because `bw` process startup dominates. Phase 5's CI job should run it on main and nightly rather than on every push, or Phase 7's native backend should replace `bw` in the hot paths.
+- **The integration suite shares one Vaultwarden** through Vitest `globalSetup` (`project.provide`/`inject`). It still takes about 15 minutes for 5 files because `bw` process startup dominates. Phase 5 moved it to main and nightly in CI; the native backend (Phase 6) should replace `bw` in the hot paths.
 - **Not done:** renaming variables, and `push` from formats other than dotenv.
 
-## Phase 5 — CI / non-interactive use
+## Phase 5 — CI / non-interactive use, and fewer `bw` calls ✅
 
-**Goal:** envkit runs in pipelines without prompts.
+**Goal:** envkit runs in pipelines without prompts, and each command makes as few `bw` calls as possible.
 
-- [ ] Detect CI (`CI=true`) or `--non-interactive`: never prompt, fail fast with a clear error.
-- [ ] Auth from env vars: `ENVKIT_SERVER`, `BW_CLIENTID`, `BW_CLIENTSECRET`, `ENVKIT_PASSWORD` (the master password of a dedicated CI vault account).
-- [ ] Document the recommended setup: one CI user per project, added to the org with **read-only** access to only the collections it needs.
-- [ ] GitHub Actions example workflow in the docs.
-- [ ] Keep secrets out of logs (never echo values; mask them when GitHub Actions `::add-mask::` is available).
+- [x] **No prompts in CI:** when `CI` is set or `--non-interactive` is passed, envkit never prompts and fails fast with a hint naming the env var to set. `--non-interactive` is a global flag that works before or after the command name. After `--` it belongs to the command `envkit run` starts.
+- [x] **Auth from env vars, non-interactive only:** with `BW_CLIENTID` and `BW_CLIENTSECRET`, envkit logs in with the API key and then unlocks with `ENVKIT_PASSWORD`. With `ENVKIT_EMAIL` and `ENVKIT_PASSWORD`, it logs in and unlocks in one step, which only works without two-step login. The server comes from `ENVKIT_SERVER`, else from `.envkit.json`. envkit prints "Logged in as … on …" to stderr. **(Decided)** It never logs in on its own in a terminal, even with these env vars set: a developer's shell may have them exported for something else.
+- [x] **Recommended setup documented** in `docs/ci.md`: one CI account per project, with read-only access to only the collections it needs, an API key, and the master password stored as a secret. The doc also has a troubleshooting table.
+- [x] **GitHub Actions example workflow** in `docs/ci.md`, running `envkit run --env ci -- vp test`.
+- [x] **Masking:** when `GITHUB_ACTIONS=true`, every read sends `::add-mask::` for each value it reads, on stderr, before anything is printed or run. Each line of a multi-line value is masked separately. Values under 4 characters are skipped, because masking `1` or `on` would garble the whole log. `%`, `\r` and `\n` are escaped as GitHub requires.
+- [x] **Fewer `bw` calls:**
+  - **`bw --version` is cached** in `$ENVKIT_HOME/bw-version.json`, keyed by the real path, size and mtime of the `bw` executable, so upgrading `bw` triggers a new check.
+  - **The cached session is trusted without `bw status`.** If `bw` rejects it ("Vault is locked" or "You are not logged in"), envkit falls back once to status, then unlock.
+  - **The session store records the last sync**, so the staleness check needs no `bw` call either.
+  - `requireSession` now makes one `status` call instead of two.
+- [x] **Repo CI:** the integration job runs on pushes to main and nightly, not on pull requests.
 
-**Done when:** a sample GitHub Actions workflow runs `envkit run -- vp test` against a Vaultwarden instance.
+**Done when:** a sample GitHub Actions workflow runs `envkit run -- vp test` against a Vaultwarden instance, and `envkit get` makes a single `bw` call with a warm session.
 
-## Phase 6 — Hardening and distribution
+✅ for the single call, partly for the workflow:
+
+- **Single `bw` call.** `packages/cli/tests/ci.test.ts` checks the exact `bw` calls:
+
+  | Case                | `bw` calls                     |
+  | ------------------- | ------------------------------ |
+  | Warm read           | `get item` only                |
+  | Stale copy          | `sync`, `get item`             |
+  | Invalidated session | `status`, `unlock`, `get item` |
+  | Cold start          | one `status`                   |
+
+- **CI workflow.** `tools/testkit/tests/ci.integration.test.ts` reproduces a fresh GitHub runner against real Vaultwarden and `bw`. The runner has only `.envkit.json`, `CI`, `GITHUB_ACTIONS`, a read-only CI account's API key and its password, and no keychain. On it, `envkit run` logs in, masks the values and runs the command. A second command reuses the login. A missing password fails fast, and a `set` is refused.
+- **Not yet verified on GitHub itself.** No workflow in this repo consumes envkit yet, because envkit isn't published (Phase 7). That check happens when the package ships.
+
+What we learned (and what later phases need to know):
+
+- **Measured against real `bw` on a dev machine, under test load:**
+  - A warm `get` takes about 5 s end to end.
+  - The fallback after an invalidated session takes about 15 s.
+  - Before Phase 5, a warm `get` made 4 `bw` calls: version, status, status and get. Now it makes 1.
+  - The remaining time is Node startup plus a single `bw` process. Getting from about 1 s to the 100–300 ms target needs Phase 6.
+- **`bw sync` works while the vault is locked, but reads don't.** So a write with a dead cached session syncs, fails the read, and only then unlocks. That order is harmless, and the tests pin it.
+- **Runners have no keychain**, so envkit uses the in-memory store and each CI step unlocks again (a few seconds). `bw` itself stays logged in for the job. The docs suggest grouping commands into one `envkit run`. Printing a session for `ENVKIT_SESSION` (like `bw unlock --raw`) could come later if multi-step jobs need it.
+- **Integration tests must set `ENVKIT_SESSION_STORE=memory`** when they spawn the binary, or the developer's real OS keychain caches sessions and tests leak state into each other.
+- **Not verified:** that GitHub masks values sent through `::add-mask::` on **stderr**. Workflow commands are documented for stdout, though the runner reads both. Check this on the first real workflow run, and switch to stdout if it fails (stdout is the child's for `run`, so that means writing before spawning).
+- **Build fix:** core's declaration build (tsgo) used to compile the tests too, and wrote `tools/testkit/src/fake-bw.d.ts` on every build. Phase 1 had committed that file by mistake. It's deleted now, and `vp pack` uses `tsconfig.build.json` (src only).
+
+## Phase 6 — Native vault client
+
+Moved ahead of distribution: it decides whether users must install `bw`, which shapes packaging.
+
+- [ ] **Native TypeScript backend:** talk to the Vaultwarden API directly and implement the Bitwarden client crypto (KDF → master key → user key → org key → item decryption) with `node:crypto`. The testkit's `VaultwardenApi` already does key derivation and encryption against real Vaultwarden.
+- [ ] Encrypted local cache of the vault data, so reads need no network and no `bw` process. Target: 100–300 ms per command.
+- [ ] Tests check it against the `bw` backend on the same vault, item by item.
+- [ ] Keep `BwCliBackend` as a fallback (`ENVKIT_BACKEND=bw`) until the native one has shipped for a while.
+
+**Done when:** the full integration suite passes with the native backend and `bw` is not installed.
+
+## Phase 7 — Hardening and distribution
 
 - [ ] Security review: process args (no secrets in argv), temp files, file permissions on any cache, session-token lifetime, error messages that might leak values.
-- [ ] `envkit doctor`: checks `bw` version, server reachability, login state, config validity and `.gitignore` coverage.
+- [ ] `envkit doctor`: checks `bw` version (if used), server reachability, login state, config validity and `.gitignore` coverage.
 - [x] Integration tests against Vaultwarden in docker (`vaultwarden/server`), run in CI. Done in Phase 1 (`tools/testkit`). Extend them as each phase adds commands.
 - [ ] Manual check of interactive prompts, 2FA and the macOS/Windows keychains (see Phase 1 notes).
 - [ ] Publish to npm (`npx envkit`, `pnpm dlx envkit`). Consider single-file binaries later.
@@ -183,9 +227,8 @@ What we learned (and what later phases need to know):
 
 **Done when:** a new team can go from zero to `envkit run` by following the README alone.
 
-## Phase 7 — Later / optional
+## Phase 8 — Later / optional
 
-- [ ] **Native TypeScript backend:** implement the Bitwarden client crypto (KDF → master key → user key → org key → item decryption) so `bw` is no longer required. Tests must check it against the `bw` backend.
 - [ ] Shell integration: a `direnv`-style hook that loads variables when you `cd` into a project.
 - [ ] Editor and runtime integrations (VS Code extension, Vite/Node loaders).
 - [ ] Turn `apps/website` into the docs and marketing site.

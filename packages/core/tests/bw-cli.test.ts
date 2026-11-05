@@ -1,3 +1,6 @@
+import { mkdtemp, rm, utimes } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 import { createFakeBw, type FakeBw } from "../../../tools/testkit/src/fake-bw.ts";
 import {
@@ -337,6 +340,39 @@ describe("BwCliBackend", () => {
     await backend.status();
     const versionChecks = (await bw.calls()).filter((call) => call.args[0] === "--version");
     expect(versionChecks).toHaveLength(1);
+  });
+
+  test("remembers the checked version across processes until bw changes", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "envkit-version-"));
+    const versionCachePath = join(cacheDir, "bw-version.json");
+    const fresh = () =>
+      new BwCliBackend({ bwPath: bw.path, appDataDir: "/tmp/x", versionCachePath });
+    const versionChecks = async () =>
+      (await bw.calls()).filter((call) => call.args[0] === "--version").length;
+    await bw.respond("status", ok({ template: { status: "unauthenticated" } }));
+
+    await fresh().status();
+    await fresh().status();
+    expect(await versionChecks()).toBe(1);
+
+    // An upgrade rewrites the executable.
+    const later = new Date(Date.now() + 60_000);
+    await utimes(bw.path, later, later);
+    await fresh().status();
+    expect(await versionChecks()).toBe(2);
+    await rm(cacheDir, { recursive: true, force: true });
+  });
+
+  test("a cached version doesn't hide a downgrade below the minimum", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "envkit-version-"));
+    const versionCachePath = join(cacheDir, "bw-version.json");
+    const old = await createFakeBw("2023.12.0");
+    const oldBackend = () =>
+      new BwCliBackend({ bwPath: old.path, appDataDir: "/tmp/x", versionCachePath });
+    await expect(oldBackend().status()).rejects.toThrow("bw 2023.12.0 is too old");
+    await expect(oldBackend().status()).rejects.toThrow("bw 2023.12.0 is too old");
+    await old.cleanup();
+    await rm(cacheDir, { recursive: true, force: true });
   });
 
   test("a missing bw executable explains how to install it", async () => {

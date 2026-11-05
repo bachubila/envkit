@@ -1,7 +1,9 @@
 import { isEnvkitError } from "@envkit/core";
-import { renderUsage, runCommand, type CommandDef, type CommandMeta } from "citty";
+import { renderUsage, runCommand, type ArgsDef, type CommandDef, type CommandMeta } from "citty";
 import { createContext, withContext, type CliContext } from "./context.ts";
 import { main } from "./main.ts";
+
+const NON_INTERACTIVE = "--non-interactive";
 
 /**
  * Runs the CLI and resolves to the process exit code. Unlike citty's `runMain`
@@ -11,25 +13,30 @@ import { main } from "./main.ts";
 export async function run(
   rawArgs: string[],
   overrides: Partial<CliContext> = {},
-  command: CommandDef = main,
+  command: CommandDef<ArgsDef> = main as CommandDef<ArgsDef>,
 ): Promise<number> {
   const context = createContext(overrides);
   const { output } = context;
   try {
     // Anything after `--` belongs to the command `envkit run` starts.
     const separator = rawArgs.indexOf("--");
-    const ownArgs = separator === -1 ? rawArgs : rawArgs.slice(0, separator);
-    if (rawArgs.length === 0 || ownArgs.includes("--help") || ownArgs.includes("-h")) {
+    const before = separator === -1 ? rawArgs : rawArgs.slice(0, separator);
+    const after = separator === -1 ? [] : rawArgs.slice(separator);
+    // A global flag, so it's handled here rather than by each command.
+    const ownArgs = before.filter((arg) => arg !== NON_INTERACTIVE);
+    if (ownArgs.length !== before.length) context.interactive = false;
+    const args = [...ownArgs, ...after];
+    if (args.length === 0 || ownArgs.includes("--help") || ownArgs.includes("-h")) {
       const [target, parent] = await resolveSubCommand(command, ownArgs);
       output.stdout(await renderUsage(target, parent));
       return 0;
     }
-    if (rawArgs.length === 1 && (rawArgs[0] === "--version" || rawArgs[0] === "-v")) {
+    if (args.length === 1 && (args[0] === "--version" || args[0] === "-v")) {
       const meta = (await resolve(command.meta)) as CommandMeta | undefined;
       output.stdout(meta?.version ?? "unknown");
       return 0;
     }
-    await withContext(context, () => runCommand(command, { rawArgs }));
+    await withContext(context, () => runCommand(command, { rawArgs: args }));
     return context.exitCode ?? 0;
   } catch (error) {
     if (isEnvkitError(error)) {

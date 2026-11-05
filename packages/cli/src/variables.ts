@@ -1,6 +1,8 @@
 import {
   BwError,
   EnvkitError,
+  githubMaskCommands,
+  isGithubActions,
   loadConfig,
   needsSync,
   readVariables,
@@ -12,7 +14,7 @@ import {
 } from "@envkit/core";
 import type { CliContext } from "./context.ts";
 import { warnOnServerMismatch } from "./project.ts";
-import { requireSession } from "./session.ts";
+import { cachedSession, isSessionRejected, requireSession, type Session } from "./session.ts";
 
 /** Flags shared by every command that reads an environment's variables. */
 export const readArgs = {
@@ -37,34 +39,68 @@ export interface EnvironmentData {
 
 export interface OpenProject {
   config: EnvkitConfig;
-  session: string;
+  /** A session `bw` accepted (or, before the first call, the cached one). */
+  readonly session: string;
   read(environment?: string): Promise<EnvironmentData>;
 }
 
 /**
  * Loads the project's config, unlocks, and syncs: always for writes (`sync:
  * "always"`), otherwise only when the local copy is stale and not offline.
+ *
+ * With a cached session it skips `bw status` and goes straight to the work,
+ * so a warm read is a single `bw` call; if `bw` rejects the session it falls
+ * back to checking the status and unlocking, then retries once.
  */
 export async function openProject(
   context: CliContext,
   options: { offline?: boolean; sync?: "always" | "when-stale" } = {},
 ): Promise<OpenProject> {
   const { config } = await loadConfig(context.cwd);
-  const { session, status } = await requireSession(context);
-  warnOnServerMismatch(context, config, status);
-
   const backend = context.backend();
-  const stale = needsSync(status.lastSync, syncIntervalFromEnv(context.env));
-  if (options.sync === "always" || (!options.offline && stale)) await backend.sync(session);
+  const sessions = await context.sessions();
+  const login = { server: config.server };
+  const cached = await cachedSession(context);
+  let optimistic = cached !== undefined;
+  let current: Session = cached ?? (await requireSession(context, login));
+  warnOnServerMismatch(context, config, current.status);
+
+  async function withSession<T>(work: (session: string) => Promise<T>): Promise<T> {
+    try {
+      return await work(current.session);
+    } catch (error) {
+      if (!optimistic || !isSessionRejected(error)) throw error;
+      optimistic = false;
+      await sessions.clear();
+      current = await requireSession(context, login);
+      return work(current.session);
+    }
+  }
+
+  const stale = needsSync(current.status.lastSync, syncIntervalFromEnv(context.env));
+  if (options.sync === "always" || (!options.offline && stale)) {
+    await withSession((session) => backend.sync(session));
+    await sessions.recordSync();
+  }
 
   return {
     config,
-    session,
+    get session() {
+      return current.session;
+    },
     async read(name) {
       const ref = resolveEnvironment(config, name);
-      const item = await getEnvironmentItem(context, session, ref.name, ref.itemId);
+      const item = await withSession((session) =>
+        getEnvironmentItem(context, session, ref.name, ref.itemId),
+      );
       const { variables, warnings } = readVariables(item);
       for (const warning of warnings) context.output.stderr(`warning: ${warning}`);
+      // Before any value can reach the job log. Workflow commands work on stderr too.
+      if (isGithubActions(context.env)) {
+        for (const command of githubMaskCommands(variables.values())) {
+          context.output.stderr(command);
+        }
+      }
       return { environment: ref.name, ref, item, variables };
     },
   };

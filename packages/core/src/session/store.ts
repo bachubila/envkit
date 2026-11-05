@@ -5,6 +5,8 @@ export interface StoredSession {
   email: string;
   /** Epoch ms after which the session is discarded. */
   expiresAt: number;
+  /** Epoch ms of the last sync envkit knows about, so warm reads can skip `bw status`. */
+  lastSync?: number;
 }
 
 export interface SessionStore {
@@ -89,7 +91,7 @@ export async function createSessionStore(account: string): Promise<SessionStore>
 
 function parseStoredSession(value: unknown): StoredSession | undefined {
   if (typeof value !== "object" || value === null) return undefined;
-  const { key, serverUrl, email, expiresAt } = value as Record<string, unknown>;
+  const { key, serverUrl, email, expiresAt, lastSync } = value as Record<string, unknown>;
   if (
     typeof key !== "string" ||
     typeof serverUrl !== "string" ||
@@ -98,5 +100,11 @@ function parseStoredSession(value: unknown): StoredSession | undefined {
   ) {
     return undefined;
   }
-  return { key, serverUrl, email, expiresAt };
+  return {
+    key,
+    serverUrl,
+    email,
+    expiresAt,
+    ...(typeof lastSync === "number" ? { lastSync } : {}),
+  };
 }
