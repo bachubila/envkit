@@ -257,7 +257,12 @@ What we learned (and what later phases need to know):
     - **Medium: CI auto-login takes the server from the committed `.envkit.json`** when `ENVKIT_SERVER` isn't set. A change to that file in a job that has the secrets would send the API key, or a master password hash, to another server. The KDF minimums keep that hash expensive to crack. Proposal: require `ENVKIT_SERVER` for auto-login, or at least recommend it in `docs/ci.md`.
     - **Low: an API-key login stores the client secret, and a password login the refresh token, in `$ENVKIT_HOME/vault/state.json`** (mode 600), as `bw` does. They could move to the keychain.
     - **Low:** `envkit set KEY=value` leaves the value in shell history; the stdin form is documented in the error hint only. `ENVKIT_SESSION` never idles out. HTTP responses have no size limit.
-- [ ] Two-step login and new-device verification for the native backend (a prompt callback in `LoginOptions`).
+- [ ] **Two-step login and new-device verification for the native backend.** Now that envkit works against Bitwarden's cloud (see **Bitwarden cloud** below), this matters more. Bitwarden emails a one-time code when an account **without** two-step login logs in from a device it doesn't know. We didn't hit it on the first real logins (2026-11-06), but other accounts will. Today the native backend shows the server's message as `vault: …` and the user's only way out is `ENVKIT_BACKEND=bw`.
+  - **Design:** add an optional prompt callback to `LoginOptions` (for example `askCode(kind, hint): Promise<string>`). The CLI implements it with its existing prompt; non-interactive runs (CI) fail with a hint to use `login --apikey`, which skips both checks.
+  - **New-device code:** when `/identity/connect/token` refuses the password grant because the device is new, prompt for the emailed code and repeat the same request with the code added (the official clients send it as `newdeviceotp`). Confirm the exact error and field name against bitwarden.eu before coding, and add the case to `toVaultError` so the message is clear even without a prompt.
+  - **Two-step login:** the refusal already carries `TwoFactorProviders2` (`hasTwoFactor`). Pick a provider (authenticator app first, then email), prompt, and repeat the request with `twoFactorToken`, `twoFactorProvider` and `twoFactorRemember=0`. Email codes must be requested first (`POST /api/two-factor/send-email-login`). WebAuthn and Duo can't work in a terminal: keep pointing those users to `--apikey`.
+  - **Tests:** Vaultwarden supports email two-step login and new-device verification once SMTP is configured, so the integration suite can run both against a mail catcher (for example Mailpit in Docker) and read the code from its API.
+  - **Done when:** an account with an authenticator app, and a fresh device on an account without two-step login, can both `envkit login` with the native backend.
 - [ ] `envkit doctor`: checks the backend (and the `bw` version with `ENVKIT_BACKEND=bw`), server reachability, login state, config validity and `.gitignore` coverage.
 - [x] Integration tests against Vaultwarden in docker (`vaultwarden/server`), run in CI. Done in Phase 1 (`tools/testkit`). Extend them as each phase adds commands.
 - [ ] Manual check of interactive prompts, 2FA and the macOS/Windows keychains (see Phase 1 notes).
@@ -306,6 +311,15 @@ What we learned (and what later phases need to know):
 1. Push to `origin` and wait for CI to pass.
 2. Push the same commit to `origin-public`.
 3. Bump `packages/cli/package.json`, then `git tag vX.Y.Z && git push origin-public vX.Y.Z`. `release.yml` runs CI and the `bw` suite, checks that the tag matches the version, then runs `npm publish` with provenance under `next`. Switch it to `latest` at 1.0.
+
+### Bitwarden cloud (0.1.1, 2026-11-06)
+
+The first real use was against **bitwarden.eu**, not Vaultwarden, and it found two problems:
+
+- **Bitwarden's servers reject requests without client headers** ("No client version header found"). Vaultwarden ignores them, so no test caught it. The native backend now sends `Bitwarden-Client-Name: cli`, `Bitwarden-Client-Version` and `Device-Type` on every request (`CLIENT_HEADERS` in `native/backend.ts`, tested in `native-headers.test.ts`). The version has to be recent enough for the server's feature checks: raise it now and then, in step with `bw`.
+- **The release workflow's `npm publish` failed with `EBADDEVENGINES`.** npm 11 enforces the root `package.json`'s `devEngines` (pnpm only) in the folder it runs from. The Publish step now runs from `runner.temp`. 0.1.1 itself was published by hand with `pnpm publish`.
+
+After that, login, `list`, `diff` and a second team member reading the shared variables all worked on bitwarden.eu with the native backend. The integration suite still runs only against Vaultwarden: there's no automated test against Bitwarden's cloud.
 
 **Can wait until after 0.1.0:** the Medium and Low items from the security review, `envkit doctor`, two-step login on the native backend, manual macOS/Windows keychain checks, and changesets.
 

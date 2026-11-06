@@ -1,6 +1,6 @@
 {
   "name": "@envkit/cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Share environment variables with your team through a self-hosted Vaultwarden.",
   "keywords": [
     "bitwarden",
