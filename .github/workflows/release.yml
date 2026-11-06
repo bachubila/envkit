@@ -46,6 +46,9 @@ jobs:
       - name: Pack
         run: cd packages/cli && pnpm pack --pack-destination "$RUNNER_TEMP"
       - name: Publish
+        # Outside the repo: npm 11 enforces the root package.json's devEngines
+        # (pnpm only) and refuses to run there.
+        working-directory: ${{ runner.temp }}
         run: |
           npm install --global npm@^11.5.1
           # Pre-1.0 releases go to `next`; switch to `latest` for 1.0.
