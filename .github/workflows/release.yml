@@ -49,4 +49,4 @@ jobs:
         run: |
           npm install --global npm@^11.5.1
           # Pre-1.0 releases go to `next`; switch to `latest` for 1.0.
-          npm publish "$RUNNER_TEMP"/envkit-*.tgz --tag next --provenance --access public
+          npm publish "$RUNNER_TEMP"/envkit-cli-*.tgz --tag next --provenance --access public

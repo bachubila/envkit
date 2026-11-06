@@ -10,12 +10,12 @@ You need:
 - **A Vaultwarden server reachable over https,** with an organization for your team. Bitwarden's own servers use the same API, but envkit is only tested against Vaultwarden.
 
 ```bash
-npm install --global envkit@next
+npm install --global @envkit/cli@next
 ```
 
-Or run it without installing: `npx envkit@next <command>`.
+Or run it without installing: `npx @envkit/cli@next <command>`.
 
-> envkit hasn't been published yet. The first release will be 0.1.0 on the `next` tag. Until then, build it from source: clone this repo, run `vp install && vp run -r build`, and use `node packages/cli/dist/bin.mjs`.
+To build it from source, clone this repo, run `vp install && vp run -r build`, and use `node packages/cli/dist/bin.mjs`.
 
 The Bitwarden CLI is **not** required. envkit talks to the server itself. To use `bw` instead, install `@bitwarden/cli` and set `ENVKIT_BACKEND=bw`.
 
