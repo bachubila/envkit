@@ -223,13 +223,22 @@ importers:
       '@clack/prompts':
         specifier: 'catalog:'
         version: 1.8.1
-      '@envkit/core':
-        specifier: workspace:*
-        version: link:../core
+      '@napi-rs/keyring':
+        specifier: 'catalog:'
+        version: 2.1.1
       citty:
         specifier: 'catalog:'
         version: 0.2.2
+      dotenv:
+        specifier: 'catalog:'
+        version: 18.0.8
+      valibot:
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@7.0.2)
     devDependencies:
+      '@envkit/core':
+        specifier: workspace:*
+        version: link:../core
       '@envkit/testkit':
         specifier: workspace:*
         version: link:../../tools/testkit

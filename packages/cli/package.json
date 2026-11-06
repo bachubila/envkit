@@ -1,8 +1,26 @@
 {
   "name": "envkit",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Share environment variables with your team through a self-hosted Vaultwarden.",
+  "keywords": [
+    "bitwarden",
+    "cli",
+    "dotenv",
+    "env",
+    "environment-variables",
+    "secrets",
+    "vaultwarden"
+  ],
+  "homepage": "https://github.com/bachubila/envkit#readme",
+  "bugs": {
+    "url": "https://github.com/bachubila/envkit/issues"
+  },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bachubila/envkit.git",
+    "directory": "packages/cli"
+  },
   "bin": {
     "envkit": "./dist/bin.mjs"
   },
@@ -18,17 +36,25 @@
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",
-    "prepublishOnly": "vp run build"
+    "prepublishOnly": "vp run build",
+    "prepack": "node -e \"require('fs').copyFileSync('../../README.md','README.md')\"",
+    "postpack": "node -e \"require('fs').rmSync('README.md',{force:true})\""
   },
   "dependencies": {
     "@clack/prompts": "catalog:",
-    "@envkit/core": "workspace:*",
-    "citty": "catalog:"
+    "@napi-rs/keyring": "catalog:",
+    "citty": "catalog:",
+    "dotenv": "catalog:",
+    "valibot": "catalog:"
   },
   "devDependencies": {
+    "@envkit/core": "workspace:*",
     "@envkit/testkit": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

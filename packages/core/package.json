@@ -1,6 +1,7 @@
 {
   "name": "@envkit/core",
   "version": "0.0.0",
+  "private": true,
   "description": "Core library for envkit: share environment variables through a Bitwarden-compatible vault.",
   "license": "MIT",
   "files": [
@@ -13,9 +14,6 @@
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "scripts": {
     "build": "vp pack",

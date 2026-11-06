@@ -279,20 +279,17 @@ What we learned (and what later phases need to know):
 
 - [x] **High security issue:** vault values could set `NODE_OPTIONS`, `LD_PRELOAD` and similar. Fixed on 2026-11-06 (see the security review above).
 - [ ] **The `bw`-backend integration suite has passed** (`ENVKIT_BACKEND=bw vp run test:integration`, about 20 minutes, needs free memory). The last run was stopped for low memory before any test ran.
-- [ ] **Bundle core into the CLI:**
-  - In `packages/cli/vite.config.ts`, add `pack.noExternal: ["@envkit/core"]`.
-  - Move `@envkit/core` to `devDependencies`.
-  - Add core's runtime dependencies to the CLI's `dependencies`: `@napi-rs/keyring` (native, so keep it external), `dotenv` and `valibot`.
-  - Mark `packages/core` as `private: true`.
-- [ ] **Package metadata for `envkit`:**
-  - Set `version` to 0.1.0.
-  - Add `engines.node` `>=22.18.0` (today it's only in the root `package.json`).
-  - Add `repository`, `homepage`, `bugs` and `keywords`.
-  - Add a README in `packages/cli`: the tarball has none, so the npm page would be empty. Copy the root README at build time, or keep a short one that links to it.
-- [ ] **Check the tarball:**
-  - `pnpm pack` in `packages/cli`; the contents should be `dist/bin.mjs`, `LICENSE`, `README.md` and `package.json`.
-  - Install the `.tgz` globally in a clean directory and run `envkit --version`.
-  - Run a login → init → set → run flow against `pnpm sandbox`.
+- [x] **Bundle core into the CLI** (2026-11-06).
+  - `deps.alwaysBundle: ["@envkit/core"]`, bundled from core's TypeScript source (the `source` condition), so a stale core build can't leak in.
+  - Core's runtime dependencies are now the CLI's. `@napi-rs/keyring` stays an external dynamic import, because it's native.
+  - `@envkit/core` is `private: true`.
+- [x] **Package metadata for `envkit`** (2026-11-06).
+  - Version 0.1.0, `engines.node >=22.18.0`, keywords.
+  - `repository`, `homepage` and `bugs` point at **`github.com/bachubila/envkit`**, the public mirror that will be the package's home. Change them if the public repo ends up elsewhere.
+  - `prepack` copies the root README into the package and `postpack` removes it (it's gitignored).
+- [x] **Check the tarball** (2026-11-06).
+  - `pnpm pack` gives `dist/bin.mjs` (112 kB), `LICENSE`, `README.md` and a `package.json` with real version numbers.
+  - Installed globally into a clean prefix (12 packages), it ran `tools/testkit/scripts/smoke-tarball.ts` against a real Vaultwarden: login, init, set, get, list, run, pull and status all passed, and `NODE_OPTIONS` was left out of `run` and `pull`.
 - [ ] **CI runs on GitHub.** The workflow triggers on `main`, but the repo's branch is `master`. Pick one (deferred by the owner on 2026-11-05), then get one green run.
 
 **Repos:** `origin` (`github.com:ebachubila/envkit`, private) is where work is pushed and proven. `origin-public` is the owner's personal mirror and is not pushed to until `origin` is proven to work. It will be the public, deployed home.
