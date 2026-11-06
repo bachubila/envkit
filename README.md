@@ -1,19 +1,24 @@
 # envkit
 
-**envkit** shares environment variables across a team using the Vaultwarden (Bitwarden-compatible) server you already host. Each project maps to a collection and each environment (dev, staging, prod) to an item. Access is controlled with your existing organizations and roles. Developers run `envkit run -- npm start` and get the right values; CI gets them from a read-only account with an API key, and they're masked in GitHub Actions logs. envkit talks to the vault directly and keeps an encrypted local copy, so reads take about 100ms and need no Bitwarden CLI.
+**envkit** shares environment variables across a team using the Bitwarden or Vaultwarden vault you already have: Bitwarden's cloud (bitwarden.com or bitwarden.eu), a self-hosted Bitwarden, or Vaultwarden. Each project maps to a collection and each environment (dev, staging, prod) to an item. Access is controlled with your existing organizations and roles. Developers run `envkit run -- npm start` and get the right values; CI gets them from a read-only account with an API key, and they're masked in GitHub Actions logs. envkit talks to the vault directly and keeps an encrypted local copy, so reads take about 100ms and need no Bitwarden CLI.
 
 ## Installation
 
 You need:
 
 - **Node.js 24.7 or newer (Node 24 LTS).**
-- **A Vaultwarden server reachable over https,** with an organization for your team. Bitwarden's own servers use the same API, but envkit is only tested against Vaultwarden.
+- **A Bitwarden-compatible vault reachable over https,** with an organization for your team. Bitwarden's cloud (`https://vault.bitwarden.com` or `https://vault.bitwarden.eu`) and Vaultwarden both work. The automated tests run against Vaultwarden.
 
 ```bash
-npm install --global @envkit/cli@next
+npm install --global @envkit/cli
 ```
 
-Or run it without installing: `npx @envkit/cli@next <command>`.
+Or run it without installing: `npx @envkit/cli <command>`.
+
+Releases go out on two npm tags:
+
+- **`latest`** (the default) is the stable release, for everyday use.
+- **`next`** is the preview channel: alpha and beta builds that get new features and fixes first and may change. Install it with `npm install --global @envkit/cli@next`.
 
 To build it from source, clone this repo, run `vp install && vp run -r build`, and use `node packages/cli/dist/bin.mjs`.
 
