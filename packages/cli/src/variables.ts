@@ -1,4 +1,5 @@
 import {
+  allowedUnsafeVariables,
   VaultError,
   EnvkitError,
   githubMaskCommands,
@@ -11,6 +12,7 @@ import {
   type EnvironmentRef,
   type EnvkitConfig,
   verifyEnvironmentItem,
+  withoutUnsafeVariables,
   type VaultItem,
 } from "@envkit/core";
 import type { CliContext } from "./context.ts";
@@ -111,6 +113,36 @@ export async function openProject(
       return { environment: ref.name, ref, item, variables };
     },
   };
+}
+
+/** The `--allow` flag of commands that hand variables to other programs. */
+export const allowArg = {
+  allow: {
+    type: "string",
+    description:
+      "Pass these variables even though they can make programs run code (e.g. NODE_OPTIONS,PATH)",
+    valueHint: "NAMES",
+  },
+} as const;
+
+/**
+ * Leaves out variables like NODE_OPTIONS or LD_PRELOAD unless allowed, with a
+ * warning naming each one. See UNSAFE_VARIABLES.
+ */
+export function dropUnsafeVariables(
+  context: CliContext,
+  variables: Map<string, string>,
+  allow: string | undefined,
+): Map<string, string> {
+  const result = withoutUnsafeVariables(variables, allowedUnsafeVariables(context.env, allow));
+  for (const name of result.skipped) {
+    context.output.stderr(
+      `warning: leaving out ${name}: it can make programs run arbitrary code. ` +
+        `If you trust everyone who can edit this environment, pass --allow ${name} ` +
+        `or set ENVKIT_ALLOW_VARIABLES=${name}.`,
+    );
+  }
+  return result.variables;
 }
 
 /** One environment's variables, for read-only commands. */

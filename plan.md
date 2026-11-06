@@ -244,6 +244,7 @@ What we learned (and what later phases need to know):
     - **High: `.envkit.json` decided which item envkit used, unchecked.** The file is committed, so anyone who can push could point a teammate's reads, and their `set`/`push` writes, at an item they control. `env remove --delete` could trash any item the victim could edit. Now `verifyEnvironmentItem` checks the item's organization, collection and envkit notes (project and environment) before every read, write and delete.
     - **Medium: the server chose the KDF settings the native client used for the password hash it sends.** A malicious server could ask for 1 iteration and get a hash that's cheap to crack. envkit now refuses settings below Bitwarden's minimums: PBKDF2 at 100k iterations; Argon2id at 2 iterations, 16 MiB and 1 thread.
     - **Medium: `pull --out` wrote secrets into an existing file before fixing its mode,** and it followed symlinks. It now writes a new 600-mode file and renames it into place.
+    - **High: vault values could set `NODE_OPTIONS`, `LD_PRELOAD`, `DYLD_*`, `PATH`, `BASH_ENV` and similar.** Anyone with write access to an environment could run code on every machine and CI job that does `envkit run`, evals `pull --format shell`, or loads the pulled file with `node --env-file`. Fixed on 2026-11-06: `run` and `pull` leave out the names in `UNSAFE_VARIABLES` and `UNSAFE_PREFIXES` (compared case-insensitively) with a warning. `--allow NAMES` or `ENVKIT_ALLOW_VARIABLES` lets named ones through. The opt-in can't come from `.envkit.json`, which is committed. `set` and `push` warn when writing one. `get NAME` still prints it.
     - **Low: `envkit run` passed `BW_CLIENTID`, `BW_CLIENTSECRET` and `BW_SESSION` to the child.** They're now stripped, as `ENVKIT_PASSWORD` and `ENVKIT_SESSION` already were.
     - **Low: an invalid field name was printed raw in warnings,** so it could carry terminal escape sequences. It's now JSON-quoted.
   - **Checked and fine:**
@@ -253,7 +254,6 @@ What we learned (and what later phases need to know):
     - Variable names are validated before they reach shell or dotenv output, and both formats quote values.
     - GitHub masking runs before any value is printed. There's no value expansion anywhere.
   - **Open (decisions needed):**
-    - **High: vault values can set `NODE_OPTIONS`, `LD_PRELOAD`, `DYLD_*`, `PATH`, `BASH_ENV` and similar.** Anyone with write access to an environment can then run code on every machine and CI job that does `envkit run` or evals `pull --format shell`. Proposal: refuse such names by default and allow them per name (`--allow NAME` or `ENVKIT_ALLOW_VARIABLES`).
     - **Medium: CI auto-login takes the server from the committed `.envkit.json`** when `ENVKIT_SERVER` isn't set. A change to that file in a job that has the secrets would send the API key, or a master password hash, to another server. The KDF minimums keep that hash expensive to crack. Proposal: require `ENVKIT_SERVER` for auto-login, or at least recommend it in `docs/ci.md`.
     - **Low: an API-key login stores the client secret, and a password login the refresh token, in `$ENVKIT_HOME/vault/state.json`** (mode 600), as `bw` does. They could move to the keychain.
     - **Low:** `envkit set KEY=value` leaves the value in shell history; the stdin form is documented in the error hint only. `ENVKIT_SESSION` never idles out. HTTP responses have no size limit.
@@ -277,7 +277,7 @@ What we learned (and what later phases need to know):
 
 **Must be done before publishing:**
 
-- [ ] **High security issue:** vault values can set `NODE_OPTIONS`, `LD_PRELOAD`, `DYLD_*`, `PATH`, `BASH_ENV` and similar (see the security review above). Refuse them by default, with an opt-in per name.
+- [x] **High security issue:** vault values could set `NODE_OPTIONS`, `LD_PRELOAD` and similar. Fixed on 2026-11-06 (see the security review above).
 - [ ] **The `bw`-backend integration suite has passed** (`ENVKIT_BACKEND=bw vp run test:integration`, about 20 minutes, needs free memory). The last run was stopped for low memory before any test ran.
 - [ ] **Bundle core into the CLI:**
   - In `packages/cli/vite.config.ts`, add `pack.noExternal: ["@envkit/core"]`.

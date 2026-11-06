@@ -2,6 +2,7 @@ import {
   applyVariableChanges,
   diffVariables,
   EnvkitError,
+  isUnsafeVariable,
   isValidVariableName,
   type VariableChanges,
 } from "@envkit/core";
@@ -125,6 +126,14 @@ export async function changeVariables(
     return;
   }
 
+  for (const name of set.keys()) {
+    if (isUnsafeVariable(name)) {
+      context.output.stderr(
+        `warning: ${name} can make programs run arbitrary code, so \`envkit run\` and \`pull\` ` +
+          `leave it out unless each user allows it (--allow ${name}).`,
+      );
+    }
+  }
   const after = new Map(data.variables);
   for (const [name, value] of set) after.set(name, value);
   for (const name of unset) after.delete(name);

@@ -45,6 +45,79 @@ export function readVariables(item: Pick<VaultItem, "fields">): ReadVariablesRes
 }
 
 /**
+ * Variables that make shells, dynamic linkers or language runtimes load or
+ * run code of the value's choosing. Anyone who can edit an environment could
+ * otherwise run code on every machine and CI job that uses it, so `run` and
+ * `pull` leave them out unless allowed by name. Compared case-insensitively
+ * (Windows treats `node_options` as NODE_OPTIONS).
+ */
+export const UNSAFE_VARIABLES: readonly string[] = [
+  "PATH",
+  "BASH_ENV",
+  "ENV",
+  "PROMPT_COMMAND",
+  "SHELLOPTS",
+  "PS4",
+  "NODE_OPTIONS",
+  "NODE_PATH",
+  "PYTHONPATH",
+  "PYTHONHOME",
+  "PYTHONSTARTUP",
+  "PERL5LIB",
+  "PERL5OPT",
+  "PERLLIB",
+  "RUBYLIB",
+  "RUBYOPT",
+  "JAVA_TOOL_OPTIONS",
+  "JDK_JAVA_OPTIONS",
+  "_JAVA_OPTIONS",
+  "GIT_ASKPASS",
+  "GIT_EXEC_PATH",
+  "GIT_SSH",
+  "GIT_SSH_COMMAND",
+  "SSH_ASKPASS",
+  "GCONV_PATH",
+];
+
+/** Dynamic linker variables: LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES, … */
+export const UNSAFE_PREFIXES: readonly string[] = ["LD_", "DYLD_"];
+
+export function isUnsafeVariable(name: string): boolean {
+  const upper = name.toUpperCase();
+  return (
+    UNSAFE_VARIABLES.includes(upper) || UNSAFE_PREFIXES.some((prefix) => upper.startsWith(prefix))
+  );
+}
+
+/**
+ * Names the user allowed despite being unsafe: `--allow` plus
+ * ENVKIT_ALLOW_VARIABLES, both comma-separated. Never from `.envkit.json`,
+ * which anyone who can push may change.
+ */
+export function allowedUnsafeVariables(env: Env, flag?: string): Set<string> {
+  return new Set(
+    [flag, env.ENVKIT_ALLOW_VARIABLES]
+      .flatMap((list) => (list ?? "").split(","))
+      .map((name) => name.trim().toUpperCase())
+      .filter(Boolean),
+  );
+}
+
+/** Splits off the unsafe variables that weren't allowed. */
+export function withoutUnsafeVariables(
+  variables: Map<string, string>,
+  allowed: Set<string>,
+): { variables: Map<string, string>; skipped: string[] } {
+  const kept = new Map<string, string>();
+  const skipped: string[] = [];
+  for (const [name, value] of variables) {
+    if (isUnsafeVariable(name) && !allowed.has(name.toUpperCase())) skipped.push(name);
+    else kept.set(name, value);
+  }
+  return { variables: kept, skipped };
+}
+
+/**
  * Login secrets, never passed on to commands envkit runs: envkit's own, and
  * the Bitwarden API key and session it may log in with.
  */

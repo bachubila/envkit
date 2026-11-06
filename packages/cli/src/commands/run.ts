@@ -3,7 +3,7 @@ import { constants } from "node:os";
 import { buildChildEnv, EnvkitError } from "@envkit/core";
 import { defineCommand } from "citty";
 import { useContext } from "../context.ts";
-import { loadVariables, readArgs } from "../variables.ts";
+import { allowArg, dropUnsafeVariables, loadVariables, readArgs } from "../variables.ts";
 
 const FORWARDED_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"];
 
@@ -14,6 +14,7 @@ export const runCommand = defineCommand({
   },
   args: {
     ...readArgs,
+    ...allowArg,
     override: {
       type: "boolean",
       default: true,
@@ -32,7 +33,8 @@ export const runCommand = defineCommand({
     }
 
     const { variables } = await loadVariables(context, args);
-    const env = buildChildEnv(context.env, variables, { override: args.override });
+    const safe = dropUnsafeVariables(context, variables, args.allow);
+    const env = buildChildEnv(context.env, safe, { override: args.override });
     context.exitCode = await spawnAndWait(command, env, context.cwd);
   },
 });

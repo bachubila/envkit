@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { formatVariables, OUTPUT_FORMATS, type OutputFormat } from "@envkit/core";
 import { defineCommand } from "citty";
 import { useContext } from "../context.ts";
-import { loadVariables, readArgs } from "../variables.ts";
+import { allowArg, dropUnsafeVariables, loadVariables, readArgs } from "../variables.ts";
 
 export const pull = defineCommand({
   meta: {
@@ -15,6 +15,7 @@ export const pull = defineCommand({
   },
   args: {
     ...readArgs,
+    ...allowArg,
     out: {
       type: "string",
       alias: "o",
@@ -32,7 +33,10 @@ export const pull = defineCommand({
     const context = useContext();
     // citty has already rejected values outside OUTPUT_FORMATS.
     const format = args.format as OutputFormat;
-    const { environment, variables } = await loadVariables(context, args);
+    const loaded = await loadVariables(context, args);
+    // Files are often loaded by tools that honor NODE_OPTIONS (node --env-file) or are eval'd.
+    const variables = dropUnsafeVariables(context, loaded.variables, args.allow);
+    const { environment } = loaded;
     const text = formatVariables(variables, format);
 
     if (!args.out) {

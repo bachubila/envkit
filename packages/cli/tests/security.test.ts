@@ -125,3 +125,70 @@ describe("output from vault data", () => {
     expect(result.stderr).not.toContain("\u001b");
   });
 });
+
+describe("variables that can make programs run code", () => {
+  async function withUnsafe() {
+    const h = await project();
+    h.vault.items
+      .get("item-1")!
+      .fields.push(
+        { name: "NODE_OPTIONS", value: "--require /tmp/evil.js", type: FieldType.Hidden },
+        { name: "LD_PRELOAD", value: "/tmp/evil.so", type: FieldType.Hidden },
+      );
+    return h;
+  }
+
+  function dump(cwd: string) {
+    const out = join(cwd, "env.json");
+    const script = `require("fs").writeFileSync(${JSON.stringify(out)}, JSON.stringify(process.env))`;
+    return { out, command: ["--", process.execPath, "-e", script] };
+  }
+
+  test("run leaves them out and says how to allow them", async () => {
+    const h = await withUnsafe();
+    const { out, command } = dump(h.cwd);
+    // The child's own NODE_OPTIONS would break the dump script, so check it's untouched instead.
+    const result = await h.envkit("run", ...command);
+    expect(result.code, result.stderr).toBe(0);
+    const env = JSON.parse(readFileSync(out, "utf8"));
+    expect(env.A).toBe("dev");
+    // `vp run` injects its own LD_PRELOAD to trace file access, so check the vault's value instead.
+    expect(env.LD_PRELOAD ?? "").not.toContain("evil");
+    expect(env.NODE_OPTIONS ?? "").not.toContain("evil");
+    expect(result.stderr).toContain("warning: leaving out NODE_OPTIONS");
+    expect(result.stderr).toContain("--allow LD_PRELOAD");
+  });
+
+  test("--allow and ENVKIT_ALLOW_VARIABLES let named ones through", async () => {
+    const h = await withUnsafe();
+    h.env.ENVKIT_ALLOW_VARIABLES = "ld_preload";
+    const result = await h.envkit("pull", "--format", "json", "--allow", "NODE_OPTIONS");
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      A: "dev",
+      NODE_OPTIONS: "--require /tmp/evil.js",
+      LD_PRELOAD: "/tmp/evil.so",
+    });
+    expect(result.stderr).toBe("");
+  });
+
+  test("pull leaves them out of every format", async () => {
+    const h = await withUnsafe();
+    for (const format of ["dotenv", "json", "shell"]) {
+      const result = await h.envkit("pull", "--format", format);
+      expect(result.stdout, format).not.toContain("evil");
+    }
+  });
+
+  test("get still prints one asked for by name", async () => {
+    const h = await withUnsafe();
+    expect((await h.envkit("get", "NODE_OPTIONS")).stdout).toBe("--require /tmp/evil.js");
+  });
+
+  test("set warns that teammates won't receive it by default", async () => {
+    const h = await project();
+    const result = await h.envkit("set", "NODE_OPTIONS=--max-old-space-size=4096");
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain("warning: NODE_OPTIONS can make programs run arbitrary code");
+  });
+});

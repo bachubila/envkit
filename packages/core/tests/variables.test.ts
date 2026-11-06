@@ -181,3 +181,45 @@ describe("quoting", () => {
     expect(shellQuote("it's")).toBe(`'it'\\''s'`);
   });
 });
+
+describe("unsafe variables", () => {
+  test("names that make programs run code, case-insensitively", async () => {
+    const { isUnsafeVariable } = await import("../src/index.ts");
+    for (const name of [
+      "NODE_OPTIONS",
+      "node_options",
+      "PATH",
+      "LD_PRELOAD",
+      "LD_LIBRARY_PATH",
+      "DYLD_INSERT_LIBRARIES",
+      "BASH_ENV",
+      "PYTHONPATH",
+      "JAVA_TOOL_OPTIONS",
+      "GIT_SSH_COMMAND",
+    ]) {
+      expect(isUnsafeVariable(name), name).toBe(true);
+    }
+    for (const name of ["API_KEY", "DATABASE_URL", "NODE_ENV", "PORT", "HOLD_PATH", "PATHS"]) {
+      expect(isUnsafeVariable(name), name).toBe(false);
+    }
+  });
+
+  test("allowed names come from the flag and ENVKIT_ALLOW_VARIABLES only", async () => {
+    const { allowedUnsafeVariables, withoutUnsafeVariables } = await import("../src/index.ts");
+    const allowed = allowedUnsafeVariables(
+      { ENVKIT_ALLOW_VARIABLES: " path , ld_preload" },
+      "NODE_OPTIONS",
+    );
+    expect([...allowed].sort()).toEqual(["LD_PRELOAD", "NODE_OPTIONS", "PATH"]);
+    const result = withoutUnsafeVariables(
+      new Map([
+        ["API_KEY", "k"],
+        ["NODE_OPTIONS", "--require x"],
+        ["DYLD_INSERT_LIBRARIES", "x"],
+      ]),
+      new Set(["NODE_OPTIONS"]),
+    );
+    expect([...result.variables.keys()]).toEqual(["API_KEY", "NODE_OPTIONS"]);
+    expect(result.skipped).toEqual(["DYLD_INSERT_LIBRARIES"]);
+  });
+});
