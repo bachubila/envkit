@@ -1,0 +1,40 @@
+name: bw backend
+
+# The bw backend's integration suite takes about 20 minutes. Our code and the
+# pinned bw and Vaultwarden versions only change with a push, so it runs when
+# one of those changes, and before every release, rather than on a schedule.
+on:
+  push:
+    branches: [main]
+    paths:
+      - pnpm-workspace.yaml # the @bitwarden/cli version (catalog)
+      - tools/testkit/package.json
+      - tools/testkit/src/vaultwarden.ts # the Vaultwarden image
+      - packages/core/src/vault/bw-cli.ts
+      - .github/workflows/bw-backend.yml
+  pull_request:
+    paths:
+      - pnpm-workspace.yaml # the @bitwarden/cli version (catalog)
+      - tools/testkit/package.json
+      - tools/testkit/src/vaultwarden.ts # the Vaultwarden image
+      - packages/core/src/vault/bw-cli.ts
+      - .github/workflows/bw-backend.yml
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration-bw:
+    name: integration (bw backend, Vaultwarden in Docker)
+    runs-on: ubuntu-latest
+    env:
+      ENVKIT_BACKEND: bw
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: voidzero-dev/setup-vp@v1.21.2
+        with:
+          node-version: "24"
+          cache: true
+      - run: vp run test:integration

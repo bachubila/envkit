@@ -290,9 +290,22 @@ What we learned (and what later phases need to know):
 - [x] **Check the tarball** (2026-11-06).
   - `pnpm pack` gives `dist/bin.mjs` (112 kB), `LICENSE`, `README.md` and a `package.json` with real version numbers.
   - Installed globally into a clean prefix (12 packages), it ran `tools/testkit/scripts/smoke-tarball.ts` against a real Vaultwarden: login, init, set, get, list, run, pull and status all passed, and `NODE_OPTIONS` was left out of `run` and `pull`.
-- [ ] **CI runs on GitHub.** The workflow triggers on `main`, but the repo's branch is `master`. Pick one (deferred by the owner on 2026-11-05), then get one green run.
+- [ ] **CI runs green on GitHub.** Decided on 2026-11-06: the branch is `main` in both repos.
+  - `ci.yml` runs check, test, build and the native integration suite on every push and PR, in both repos.
+  - `bw-backend.yml` runs the `bw` suite only when the `bw` version, the Vaultwarden image or `bw-cli.ts` changes, plus on demand and before releases. There's no nightly: with pinned versions it would only re-test unchanged code.
+  - `release.yml` publishes on a `v*` tag, only in `bachubila/envkit`.
+- [ ] **npm side, after the first manual publish:** on npmjs.com → envkit → Settings → Trusted publishing, add GitHub Actions with repo `bachubila/envkit`, workflow `release.yml` and environment `npm`. npm only offers this for a package that already exists, so 0.1.0 is published by hand.
 
-**Repos:** `origin` (`github.com:ebachubila/envkit`, private) is where work is pushed and proven. `origin-public` is the owner's personal mirror and is not pushed to until `origin` is proven to work. It will be the public, deployed home.
+**Repos:**
+
+- **`origin`** (`ebachubila/envkit`, private) is where work is pushed and proven first.
+- **`origin-public`** (`bachubila/envkit`, tied to the npm account) is the public home, and releases are published from it.
+
+**Release flow:**
+
+1. Push to `origin` and wait for CI to pass.
+2. Push the same commit to `origin-public`.
+3. Bump `packages/cli/package.json`, then `git tag vX.Y.Z && git push origin-public vX.Y.Z`. `release.yml` runs CI and the `bw` suite, checks that the tag matches the version, then runs `npm publish` with provenance under `next`. Switch it to `latest` at 1.0.
 
 **Can wait until after 0.1.0:** the Medium and Low items from the security review, `envkit doctor`, two-step login on the native backend, manual macOS/Windows keychain checks, and changesets.
 

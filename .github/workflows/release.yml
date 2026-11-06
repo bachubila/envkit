@@ -1,0 +1,52 @@
+name: Release
+
+# Publishing a release: bump packages/cli/package.json, commit, then
+#   git tag v0.1.0 && git push origin-public v0.1.0
+# Branch pushes never publish. Only bachubila/envkit (the public repo tied to
+# the npm account) publishes; in other copies of the repo this does nothing.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    if: github.repository == 'bachubila/envkit'
+    uses: ./.github/workflows/ci.yml
+
+  bw-backend:
+    if: github.repository == 'bachubila/envkit'
+    uses: ./.github/workflows/bw-backend.yml
+
+  publish:
+    name: publish to npm
+    needs: [ci, bw-backend]
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing and provenance; no npm token is stored
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: voidzero-dev/setup-vp@v1.21.2
+        with:
+          node-version: "24"
+          cache: true
+      - name: The tag matches the package version
+        run: |
+          version=$(node -p "require('./packages/cli/package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match packages/cli version $version"
+            exit 1
+          fi
+      # pnpm resolves workspace: and catalog: versions into the tarball;
+      # npm then publishes that tarball with OIDC (trusted publishing needs npm 11.5.1+).
+      - name: Pack
+        run: cd packages/cli && pnpm pack --pack-destination "$RUNNER_TEMP"
+      - name: Publish
+        run: |
+          npm install --global npm@^11.5.1
+          # Pre-1.0 releases go to `next`; switch to `latest` for 1.0.
+          npm publish "$RUNNER_TEMP"/envkit-*.tgz --tag next --provenance --access public
