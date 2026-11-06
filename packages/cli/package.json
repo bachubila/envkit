@@ -1,5 +1,5 @@
 {
-  "name": "envkit",
+  "name": "@envkit/cli",
   "version": "0.1.0",
   "description": "Share environment variables with your team through a self-hosted Vaultwarden.",
   "keywords": [
