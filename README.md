@@ -6,7 +6,7 @@
 
 You need:
 
-- **Node.js 22.18 or newer.**
+- **Node.js 24.7 or newer (Node 24 LTS).**
 - **A Vaultwarden server reachable over https,** with an organization for your team. Bitwarden's own servers use the same API, but envkit is only tested against Vaultwarden.
 
 ```bash

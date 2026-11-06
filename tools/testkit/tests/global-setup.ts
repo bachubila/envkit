@@ -1,5 +1,7 @@
 import type { TestProject } from "vite-plus/test/node";
-import { startVaultwarden } from "../src/index.ts";
+// Not ../src/index.ts: global setup ignores the "source" condition, so @envkit/core
+// would resolve to its dist, which a fresh checkout hasn't built.
+import { startVaultwarden } from "../src/vaultwarden.ts";
 
 declare module "vite-plus/test" {
   interface ProvidedContext {

@@ -51,7 +51,7 @@ Both packages use `vp pack` for builds, `vp test` (Vitest) for tests, `vp check`
 - [x] Add a `bin` entry `envkit` → `packages/cli/dist/bin.mjs`.
 - [x] Commands: `envkit --version`, `envkit --help`.
 - [x] Root script: `vp run envkit <args>` runs the CLI from source during development (no build needed).
-- [x] CI (`.github/workflows/ci.yml`) runs `vp run ready` on Node 22.18 and 24, then smoke-tests the built binary.
+- [x] CI (`.github/workflows/ci.yml`) runs `vp run ready` on Node 24.7 and the latest 24, then smoke-tests the built binary.
 
 Notes for later phases:
 
@@ -284,7 +284,7 @@ What we learned (and what later phases need to know):
   - Core's runtime dependencies are now the CLI's. `@napi-rs/keyring` stays an external dynamic import, because it's native.
   - `@envkit/core` is `private: true`.
 - [x] **Package metadata for `envkit`** (2026-11-06).
-  - Version 0.1.0, `engines.node >=22.18.0`, keywords.
+  - Version 0.1.0, `engines.node >=24.7.0`, keywords.
   - `repository`, `homepage` and `bugs` point at **`github.com/bachubila/envkit`**, the public mirror that will be the package's home. Change them if the public repo ends up elsewhere.
   - `prepack` copies the root README into the package and `postpack` removes it (it's gitignored).
 - [x] **Check the tarball** (2026-11-06).

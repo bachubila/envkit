@@ -54,7 +54,7 @@ Two limits on masking:
 
 ## Other CI systems
 
-The setup is the same anywhere: install Node.js 22.18 or newer and envkit, set the three secrets as env vars, and set `CI=true` if your CI doesn't. Only the masking is GitHub-specific, so check that your CI hides secret values in its logs.
+The setup is the same anywhere: install Node.js 24.7 or newer (Node 24 LTS) and envkit, set the three secrets as env vars, and set `CI=true` if your CI doesn't. Only the masking is GitHub-specific, so check that your CI hides secret values in its logs.
 
 ## The Bitwarden CLI backend
 
