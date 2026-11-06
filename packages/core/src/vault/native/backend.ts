@@ -441,7 +441,7 @@ export class NativeBackend implements VaultBackend {
   }
 
   #send<T>(request: HttpRequest): Promise<T> {
-    return send<T>(request, this.#ca);
+    return send<T>({ ...request, headers: { ...CLIENT_HEADERS, ...request.headers } }, this.#ca);
   }
 }
 
@@ -658,6 +658,17 @@ function extraCa(env: Env): string[] | undefined {
 // Bitwarden's DeviceType: WindowsCLI, MacOsCLI, LinuxCLI.
 const DEVICE_TYPE =
   process.platform === "win32" ? "23" : process.platform === "darwin" ? "24" : "25";
+
+/**
+ * Bitwarden's own servers reject requests without these ("No client version header
+ * found"); Vaultwarden ignores them. envkit identifies as the CLI it speaks the
+ * protocol of, at a version recent enough for the server's feature checks.
+ */
+const CLIENT_HEADERS: Record<string, string> = {
+  "Bitwarden-Client-Name": "cli",
+  "Bitwarden-Client-Version": "2026.10.0",
+  "Device-Type": DEVICE_TYPE,
+};
 
 const SECURE_NOTE = 2;
 
