@@ -278,7 +278,7 @@ What we learned (and what later phases need to know):
 **Must be done before publishing:**
 
 - [x] **High security issue:** vault values could set `NODE_OPTIONS`, `LD_PRELOAD` and similar. Fixed on 2026-11-06 (see the security review above).
-- [ ] **The `bw`-backend integration suite has passed** (`ENVKIT_BACKEND=bw vp run test:integration`, about 20 minutes, needs free memory). The last run was stopped for low memory before any test ran.
+- [x] **The `bw`-backend integration suite has passed** (2026-11-06): `ENVKIT_BACKEND=bw vp run test:integration`, 7 files, 50 tests, in 19m21s. The native backend takes about 4.5 minutes.
 - [x] **Bundle core into the CLI** (2026-11-06).
   - `deps.alwaysBundle: ["@envkit/core"]`, bundled from core's TypeScript source (the `source` condition), so a stale core build can't leak in.
   - Core's runtime dependencies are now the CLI's. `@napi-rs/keyring` stays an external dynamic import, because it's native.
