@@ -299,7 +299,7 @@ What we learned (and what later phases need to know):
   - `ci.yml` runs check, test, build and the native integration suite on every push and PR, in both repos.
   - `bw-backend.yml` runs the `bw` suite only when the `bw` version, the Vaultwarden image or `bw-cli.ts` changes, plus on demand and before releases. There's no nightly: with pinned versions it would only re-test unchanged code.
   - `release.yml` publishes on a `v*` tag, only in `bachubila/envkit`.
-- [ ] **npm side, after the first manual publish:** on npmjs.com → envkit → Settings → Trusted publishing, add GitHub Actions with repo `bachubila/envkit`, workflow `release.yml` and environment `npm`. npm only offers this for a package that already exists, so 0.1.0 is published by hand.
+- [ ] **npm side, after the first manual publish:** on npmjs.com → `@envkit/cli` (renamed from `envkit`) → Settings → Trusted publishing, add GitHub Actions with repo `bachubila/envkit`, workflow `release.yml` and environment `npm`. npm only offers this for a package that already exists, so 0.1.0 is published by hand.
 
 **Repos:**
 

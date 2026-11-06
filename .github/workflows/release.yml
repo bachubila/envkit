@@ -43,8 +43,20 @@ jobs:
           fi
       # pnpm resolves workspace: and catalog: versions into the tarball;
       # npm then publishes that tarball with OIDC (trusted publishing needs npm 11.5.1+).
+      # `pnpm pack` doesn't run prepublishOnly, so build first: without this the
+      # tarball has no dist/ and the published package has no binary.
+      - name: Build
+        run: |
+          vp run @envkit/cli#build
+          node packages/cli/dist/bin.mjs --version
       - name: Pack
-        run: cd packages/cli && pnpm pack --pack-destination "$RUNNER_TEMP"
+        run: |
+          cd packages/cli && pnpm pack --pack-destination "$RUNNER_TEMP"
+          tarball=$(ls "$RUNNER_TEMP"/envkit-cli-*.tgz)
+          tar -tzf "$tarball" | grep -qx 'package/dist/bin.mjs' || {
+            echo "::error::$tarball has no dist/bin.mjs; refusing to publish"
+            exit 1
+          }
       - name: Publish
         # Outside the repo: npm 11 enforces the root package.json's devEngines
         # (pnpm only) and refuses to run there.
