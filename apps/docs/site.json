@@ -1,0 +1,38 @@
+{
+  "title": "envkit",
+  "description": "Share environment variables with your team through Bitwarden or Vaultwarden.",
+  "hostname": "https://docs.envkit.dev",
+  "nav": [
+    {
+      "text": "Guide",
+      "link": "/getting-started"
+    },
+    {
+      "text": "Website",
+      "link": "https://envkit.dev"
+    }
+  ],
+  "sidebar": [
+    {
+      "text": "Guide",
+      "items": [
+        {
+          "text": "Introduction",
+          "link": "/"
+        },
+        {
+          "text": "Getting started",
+          "link": "/getting-started"
+        },
+        {
+          "text": "Configuration",
+          "link": "/configuration"
+        },
+        {
+          "text": "CI setup",
+          "link": "/ci"
+        }
+      ]
+    }
+  ]
+}

@@ -124,3 +124,8 @@ vp run -r build
 ```bash
 vp run dev
 ```
+
+### Documentation site
+
+Run `vp run docs#dev` to edit the VitePress site in `apps/docs`. See
+[the docs app README](apps/docs/README.md) for authoring and deployment instructions.

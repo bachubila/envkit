@@ -32,3 +32,6 @@ dist-ssr
 # AI agent worktrees
 .claude/worktrees/
 packages/cli/README.md
+
+# VitePress development cache
+**/.vitepress/cache/
