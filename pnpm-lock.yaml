@@ -170,6 +170,9 @@ catalogs:
     '@clack/prompts':
       specifier: 1.8.1
       version: 1.8.1
+    '@fontsource/iosevka':
+      specifier: ^5.3.0
+      version: 5.3.0
     '@napi-rs/keyring':
       specifier: 2.1.1
       version: 2.1.1
@@ -221,6 +224,9 @@ importers:
 
   apps/docs:
     devDependencies:
+      '@fontsource/iosevka':
+        specifier: 'catalog:'
+        version: 5.3.0
       vitepress:
         specifier: 'catalog:'
         version: 1.6.4(@algolia/client-search@5.63.0)(@types/node@24.19.2)(lightningcss@1.33.0)(postcss@8.5.32)(search-insights@2.17.3)(typescript@7.0.2)
@@ -631,6 +637,9 @@ packages:
     engines: {node: '>=12'}
     cpu: [x64]
     os: [win32]
+
+  '@fontsource/iosevka@5.3.0':
+    resolution: {integrity: sha512-RcG0v/65e4PTuThR/d7n9jj6PLlex7YUGaLa4ZpL+NnqArWQmD8Z+6gYBTxPMVWxYMRcEw6OF4rdt8XisnC5zA==}
 
   '@hapi/bourne@3.0.0':
     resolution: {integrity: sha512-Waj1cwPXJDucOib4a3bAISsKJVb15MKi9IvmTI/7ssVEm6sywXGjVJDhl6/umt1pK1ZS7PacXU3A1PmFKHEZ2w==}
@@ -3382,6 +3391,8 @@ snapshots:
 
   '@esbuild/win32-x64@0.21.5':
     optional: true
+
+  '@fontsource/iosevka@5.3.0': {}
 
   '@hapi/bourne@3.0.0': {}
 

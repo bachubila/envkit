@@ -8,6 +8,7 @@ catalogMode: prefer
 catalog:
   "@bitwarden/cli": 2026.10.0
   "@clack/prompts": 1.8.1
+  "@fontsource/iosevka": ^5.3.0
   "@napi-rs/keyring": 2.1.1
   "@types/cross-spawn": ^6.0.6
   "@types/node": ^24

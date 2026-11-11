@@ -1,6 +1,14 @@
+/// <reference types="vitepress/client" />
+
+import "@fontsource/iosevka/latin-400.css";
+import "@fontsource/iosevka/latin-400-italic.css";
+import "@fontsource/iosevka/latin-500.css";
+import "@fontsource/iosevka/latin-600.css";
+import "@fontsource/iosevka/latin-700.css";
 import { h } from "vue";
 import DefaultTheme from "vitepress/theme";
 import { useData } from "vitepress";
+import "./style.css";
 
 export default {
   extends: DefaultTheme,
