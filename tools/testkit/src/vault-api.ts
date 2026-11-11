@@ -66,6 +66,25 @@ export class VaultwardenApi {
     return { email, password: input.password, masterPasswordHash, publicKeyDer };
   }
 
+  /** Enables TOTP for a disposable test account and returns a fresh code generator. */
+  async enableAuthenticator(account: TestAccount): Promise<() => string> {
+    const response = await this.#api<{
+      authenticator: { key: string };
+      userVerificationToken: string;
+    }>(account, "POST", "/api/two-factor/get-authenticator", {
+      masterPasswordHash: account.masterPasswordHash,
+    });
+    const key = response.authenticator.key;
+    await this.#api(account, "POST", "/api/two-factor/authenticator", {
+      key,
+      token: totp(key),
+      userVerificationToken: response.userVerificationToken,
+    });
+    // Activation consumes the current code. Vaultwarden accepts the next step
+    // too, so tests need not sleep until the next 30-second window.
+    return () => totp(key, Date.now() + 30_000);
+  }
+
   /** Creates a free organization owned by `owner`, with no collections. */
   async createOrganization(owner: TestAccount, name: string): Promise<TestOrganization> {
     const key = randomBytes(64);
@@ -243,4 +262,22 @@ function encryptRsaOaep(plaintext: Buffer, publicKeyDer: Buffer): string {
     plaintext,
   );
   return `4.${ciphertext.toString("base64")}`;
+}
+
+/** RFC 6238 SHA-1, six digits; only for disposable integration-test accounts. */
+function totp(base32: string, now = Date.now()): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const char of base32.replace(/=+$/, "").toUpperCase()) {
+    const value = alphabet.indexOf(char);
+    if (value < 0) throw new Error("Invalid test authenticator key");
+    bits += value.toString(2).padStart(5, "0");
+  }
+  const bytes: number[] = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(now / 30_000)));
+  const digest = createHmac("sha1", Buffer.from(bytes)).update(counter).digest();
+  const offset = digest.at(-1)! & 15;
+  return ((digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, "0");
 }

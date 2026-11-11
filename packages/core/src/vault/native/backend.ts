@@ -100,7 +100,8 @@ export class NativeBackend implements VaultBackend {
     });
   }
 
-  async login({ email, password }: LoginOptions): Promise<string> {
+  async login(options: LoginOptions): Promise<string> {
+    const { email, password } = options;
     const state = await this.#loggedOut();
     const server = serverOf(state);
     const normalized = email.trim().toLowerCase();
@@ -127,6 +128,7 @@ export class NativeBackend implements VaultBackend {
         client_id: "cli",
       },
       { "auth-email": Buffer.from(normalized).toString("base64url") },
+      options,
     );
     const account = accountFromToken(token);
     const userKey = unwrapUserKey(account, masterKey);
@@ -425,18 +427,58 @@ export class NativeBackend implements VaultBackend {
     state: State,
     grant: Record<string, string>,
     headers?: Record<string, string>,
+    login?: LoginOptions,
   ): Promise<TokenResponse> {
-    try {
-      return await this.#send<TokenResponse>(tokenRequest(state, grant, headers));
-    } catch (error) {
-      if (error instanceof HttpError && error.body && hasTwoFactor(error.body)) {
-        throw new EnvkitError("This account uses two-step login", {
-          hint:
-            "Log in with an API key instead (`envkit login --apikey` with BW_CLIENTID and BW_CLIENTSECRET), " +
-            "or set ENVKIT_BACKEND=bw to use the Bitwarden CLI, which can ask for the code.",
-        });
+    const emailSent = new Set<string>();
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.#send<TokenResponse>(tokenRequest(state, grant, headers));
+      } catch (error) {
+        if (!(error instanceof HttpError) || error.status !== 400 || !error.body) {
+          throw toVaultError(error);
+        }
+        const kind = verificationKind(error.body);
+        if (!kind) {
+          if (hasTwoFactor(error.body)) {
+            throw verificationError(
+              "This account requires a two-step method unsupported in a terminal",
+            );
+          }
+          throw toVaultError(error);
+        }
+        if (!login?.interactive || !login.askCode) {
+          throw verificationError(
+            kind === "new-device"
+              ? "This device needs email verification"
+              : "This account uses two-step login",
+          );
+        }
+        if (attempt >= 3) throw verificationError("Login verification failed after three attempts");
+        if (kind === "email" && !emailSent.has(kind)) {
+          try {
+            await this.#send({
+              method: "POST",
+              url: `${serverOf(state)}/api/two-factor/send-email-login`,
+              json: {
+                email: grant.username,
+                masterPasswordHash: grant.password,
+                deviceIdentifier: state.deviceId,
+              },
+            });
+          } catch (sendError) {
+            throw toVaultError(sendError);
+          }
+          emailSent.add(kind);
+        }
+        const code = (await login.askCode(kind)).trim();
+        if (!code) throw verificationError("No login verification code supplied");
+        if (kind === "new-device") grant.newDeviceOtp = code;
+        else {
+          grant.twoFactorToken = code;
+          grant.twoFactorProvider = kind === "authenticator" ? "0" : "1";
+          grant.twoFactorRemember = "0";
+        }
       }
-      throw toVaultError(error);
     }
   }
 
@@ -618,6 +660,35 @@ function apiKeyGrant(apiKey: { clientId: string; clientSecret: string }): Record
 
 function hasTwoFactor(body: Record<string, unknown>): boolean {
   return "TwoFactorProviders" in body || "TwoFactorProviders2" in body;
+}
+
+function verificationKind(
+  body: Record<string, unknown>,
+): "authenticator" | "email" | "new-device" | undefined {
+  const providers = body.TwoFactorProviders2;
+  const keys =
+    providers && typeof providers === "object" && !Array.isArray(providers)
+      ? Object.keys(providers)
+      : Array.isArray(body.TwoFactorProviders)
+        ? body.TwoFactorProviders.map(String)
+        : [];
+  if (keys.includes("0")) return "authenticator";
+  if (keys.includes("1")) return "email";
+  const model = body.ErrorModel ?? body.errorModel;
+  if (
+    model &&
+    typeof model === "object" &&
+    "Message" in model &&
+    model.Message === "new device verification required"
+  )
+    return "new-device";
+  return undefined;
+}
+
+function verificationError(message: string): EnvkitError {
+  return new EnvkitError(message, {
+    hint: "Use `envkit login --apikey` with BW_CLIENTID and BW_CLIENTSECRET, or set ENVKIT_BACKEND=bw for the Bitwarden CLI.",
+  });
 }
 
 function serverOf(state: State): string {

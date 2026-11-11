@@ -24,6 +24,8 @@ To build it from source, clone this repo, run `vp install && vp run -r build`, a
 
 The Bitwarden CLI is **not** required. envkit talks to the server itself. To use `bw` instead, install `@bitwarden/cli` and set `ENVKIT_BACKEND=bw`.
 
+Interactive native login supports authenticator codes, email two-step codes, and new-device email verification. Authenticator login is tested against Vaultwarden; the email flows still need real-server verification. CI and accounts using browser-only methods should use `envkit login --apikey` with `BW_CLIENTID` and `BW_CLIENTSECRET` (see [CI setup](docs/ci.md)).
+
 ## Quickstart
 
 ### 1. Set up a project (once, by an organization owner or admin)

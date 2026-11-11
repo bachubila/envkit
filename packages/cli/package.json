@@ -44,12 +44,14 @@
     "@clack/prompts": "catalog:",
     "@napi-rs/keyring": "catalog:",
     "citty": "catalog:",
+    "cross-spawn": "catalog:",
     "dotenv": "catalog:",
     "valibot": "catalog:"
   },
   "devDependencies": {
     "@envkit/core": "workspace:*",
     "@envkit/testkit": "workspace:*",
+    "@types/cross-spawn": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:"

@@ -68,6 +68,18 @@ export const login = defineCommand({
         email: accountEmail,
         password,
         interactive: context.interactive,
+        ...(context.interactive
+          ? {
+              askCode: (kind: "authenticator" | "email" | "new-device") =>
+                context.prompt.password(
+                  kind === "authenticator"
+                    ? "Authenticator code"
+                    : kind === "new-device"
+                      ? "New-device verification code from your email"
+                      : "Two-step login code from your email",
+                ),
+            }
+          : {}),
       });
       status = await backend.status();
       await (await context.sessions()).save(session, status);

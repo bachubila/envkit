@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
 import { constants } from "node:os";
 import { buildChildEnv, EnvkitError } from "@envkit/core";
 import { defineCommand } from "citty";
+import spawn from "cross-spawn";
 import { useContext } from "../context.ts";
 import { allowArg, dropUnsafeVariables, loadVariables, readArgs } from "../variables.ts";
 
@@ -49,6 +49,8 @@ function spawnAndWait(
   cwd: string,
 ): Promise<number> {
   return new Promise((resolve, reject) => {
+    // Handles Windows .cmd shims and their argument escaping without enabling
+    // shell interpretation for every command on every platform.
     const child = spawn(file!, args, { stdio: "inherit", env, cwd });
     const forward = (signal: NodeJS.Signals) => child.kill(signal);
     for (const signal of FORWARDED_SIGNALS) process.on(signal, forward);

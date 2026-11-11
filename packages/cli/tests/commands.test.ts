@@ -1,8 +1,29 @@
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test, vi } from "vite-plus/test";
 import { FakeVault } from "@envkit/testkit";
 import { ALICE, harness, SERVER } from "./helpers.ts";
 
 describe("envkit login", () => {
+  test.each([
+    ["authenticator", "Authenticator code"],
+    ["email", "Two-step login code from your email"],
+    ["new-device", "New-device verification code from your email"],
+  ] as const)("prompts privately for %s verification", async (kind, label) => {
+    const { envkit, vault, prompts } = harness({
+      interactive: true,
+      env: { ENVKIT_PASSWORD: ALICE.password },
+      answers: ["123456"],
+    });
+    const original = vault.login.bind(vault);
+    vi.spyOn(vault, "login").mockImplementation(async (options) => {
+      expect(await options.askCode!(kind)).toBe("123456");
+      return original(options);
+    });
+    const result = await envkit("login", "--server", SERVER, "--email", ALICE.email);
+    expect(result.code).toBe(0);
+    expect(prompts.asked).toEqual([label]);
+    expect(result.stdout + result.stderr).not.toContain("123456");
+  });
+
   test("non-interactive login with flags and ENVKIT_PASSWORD", async () => {
     const { envkit, vault } = harness({ env: { ENVKIT_PASSWORD: ALICE.password } });
     const result = await envkit("login", "--server", "vault.example.test/", "--email", ALICE.email);

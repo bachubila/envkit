@@ -136,7 +136,8 @@ What we learned (and what later phases need to know):
 - **`ENVKIT_SESSION_STORE=memory`** (new) keeps envkit out of the OS keychain. The integration tests use it for spawned binaries; it's also useful on shared machines.
 - **Latency:** each read costs about 3–4 `bw` processes (status, status with session, maybe sync, get item), so 3–6 s per `envkit run`. That's acceptable for starting a dev server, slow for scripts calling `envkit get` in a loop (use `pull --format shell` once instead). This is the main argument for the native backend (now Phase 6); a cheaper fix is skipping the second `status` call when the cached session was validated recently.
 - **The integration suite now takes about 10 minutes** (4 files, each starting its own Vaultwarden, plus slow `bw` calls). Before it grows further, share one server per run through a Vitest `globalSetup`.
-- **Not done:** Windows support in `run` (`.cmd` shims need `shell: true` or cross-spawn), and loading a `.env` file _and_ the vault together.
+- [x] **Fix Windows command launching in `run`:** use cross-spawn to resolve and launch Windows `.cmd`/`.bat` shims with argument escaping, so `envkit run -- pnpm dev` works with pnpm on PATH. Exit codes and signal forwarding retain the existing handling. Added Windows regression tests for a `.cmd` shim on PATH, paths and arguments with spaces, shell metacharacters, environment injection, working directory, exit codes and missing commands, plus a Windows CI job. Windows execution must be confirmed by CI; local validation runs on Linux.
+- **Not done:** loading a `.env` file _and_ the vault together.
 
 ## Phase 4 — Writing secrets ✅
 
@@ -233,7 +234,7 @@ What we learned (and what later phases need to know):
 - **`bw` reports `revisionDate` at millisecond precision; the server stores microseconds.** The native backend normalizes to `bw`'s format for parity and compares normalized values. `lastKnownRevisionDate` goes to the server unchanged.
 - **The `bw` backend returned `undefined` for empty field values,** although `VaultField` says `null`. The parity test caught it, and it's fixed.
 - **Responses use mixed casing:** the token response is PascalCase (`Key`, `PrivateKey`, `Kdf`) and the API is camelCase. Errors arrive in `message`, `errorModel.message` or `error_description`.
-- **Two-step login is not supported natively.** The backend has no way to prompt, so it points users to API-key login or `ENVKIT_BACKEND=bw`. New-device verification (Vaultwarden with SMTP) would hit the same wall. Both are candidates for Phase 7, which would need a prompt callback in `LoginOptions`.
+- **Native login verification:** Phase 7 adds a prompt callback for authenticator, email and new-device codes. Authenticator login is tested against Vaultwarden; email and new-device paths still need real-server verification (see Phase 7).
 - **TLS:** Node reads `NODE_EXTRA_CA_CERTS` only at startup. So when the backend's `env` sets it but the process didn't, the backend passes the CA explicitly (in-process tests, embedders).
 - **Not done:** pruning the copy when the server deletes items is covered by full syncs only (there's no delta sync), and there's no file locking between concurrent envkit processes. Each state change re-reads `state.json` first, which keeps the race window small; the worst case is one extra unlock.
 
@@ -257,12 +258,13 @@ What we learned (and what later phases need to know):
     - **Medium: CI auto-login takes the server from the committed `.envkit.json`** when `ENVKIT_SERVER` isn't set. A change to that file in a job that has the secrets would send the API key, or a master password hash, to another server. The KDF minimums keep that hash expensive to crack. Proposal: require `ENVKIT_SERVER` for auto-login, or at least recommend it in `docs/ci.md`.
     - **Low: an API-key login stores the client secret, and a password login the refresh token, in `$ENVKIT_HOME/vault/state.json`** (mode 600), as `bw` does. They could move to the keychain.
     - **Low:** `envkit set KEY=value` leaves the value in shell history; the stdin form is documented in the error hint only. `ENVKIT_SESSION` never idles out. HTTP responses have no size limit.
-- [ ] **Two-step login and new-device verification for the native backend.** Now that envkit works against Bitwarden's cloud (see **Bitwarden cloud** below), this matters more. Bitwarden emails a one-time code when an account **without** two-step login logs in from a device it doesn't know. We didn't hit it on the first real logins (2026-11-06), but other accounts will. Today the native backend shows the server's message as `vault: …` and the user's only way out is `ENVKIT_BACKEND=bw`.
-  - **Design:** add an optional prompt callback to `LoginOptions` (for example `askCode(kind, hint): Promise<string>`). The CLI implements it with its existing prompt; non-interactive runs (CI) fail with a hint to use `login --apikey`, which skips both checks.
-  - **New-device code:** when `/identity/connect/token` refuses the password grant because the device is new, prompt for the emailed code and repeat the same request with the code added (the official clients send it as `newdeviceotp`). Confirm the exact error and field name against bitwarden.eu before coding, and add the case to `toVaultError` so the message is clear even without a prompt.
-  - **Two-step login:** the refusal already carries `TwoFactorProviders2` (`hasTwoFactor`). Pick a provider (authenticator app first, then email), prompt, and repeat the request with `twoFactorToken`, `twoFactorProvider` and `twoFactorRemember=0`. Email codes must be requested first (`POST /api/two-factor/send-email-login`). WebAuthn and Duo can't work in a terminal: keep pointing those users to `--apikey`.
-  - **Tests:** Vaultwarden supports email two-step login and new-device verification once SMTP is configured, so the integration suite can run both against a mail catcher (for example Mailpit in Docker) and read the code from its API.
-  - **Done when:** an account with an authenticator app, and a fresh device on an account without two-step login, can both `envkit login` with the native backend.
+- [ ] **Two-step login and new-device verification for the native backend:** implementation added; email integration and cloud verification remain before closing this item.
+  - [x] Optional `LoginOptions.askCode` callback, wired to hidden CLI prompts only for interactive login. Non-interactive login gives an API-key fallback hint.
+  - [x] Prefer authenticator (provider 0), then email (provider 1); request email codes through `/api/two-factor/send-email-login`, including the device identifier. Retry with `twoFactorToken`, `twoFactorProvider` and `twoFactorRemember=0`. Unsupported methods retain API-key / `bw` guidance.
+  - [x] Recognize Bitwarden's `ErrorModel.Message = "new device verification required"` and retry with `newDeviceOtp`. These spellings are verified against the official clients' `ApiService` and `PasswordTokenRequest`; a real bitwarden.eu new-device login is still unverified.
+  - [x] Bound repeated challenges to three prompts, propagate cancellation, and never persist codes. Unit tests cover each challenge, fallback behavior, request fields and state; CLI tests cover private prompts. A Docker integration test enables an authenticator on Vaultwarden 1.37.5 and completes native login.
+  - [ ] Add SMTP/mail-catcher integration coverage for email two-step login and new-device verification where the server supports it; manually verify the new-device flow against bitwarden.eu.
+  - **Done when:** an account with an authenticator app, and a fresh device on an account without two-step login, can both `envkit login` with the native backend, with real-server validation of the remaining email paths.
 - [ ] `envkit doctor`: checks the backend (and the `bw` version with `ENVKIT_BACKEND=bw`), server reachability, login state, config validity and `.gitignore` coverage.
 - [x] Integration tests against Vaultwarden in docker (`vaultwarden/server`), run in CI. Done in Phase 1 (`tools/testkit`). Extend them as each phase adds commands.
 - [ ] Manual check of interactive prompts, 2FA and the macOS/Windows keychains (see Phase 1 notes).
@@ -327,6 +329,8 @@ After that, login, `list`, `diff` and a second team member reading the shared va
 
 ## Phase 8 — Later / optional
 
+- [ ] **Opt-in usage telemetry and error reporting:** see [telemetry.md](telemetry.md) for separate consent, PostHog event schemas, secret exclusion and delivery constraints. Start with command usage and categorized failures; sanitized stack traces follow later.
+- [ ] **Shell autocompletion scripts:** add `envkit completion <bash|zsh|fish|powershell>` to generate installation-ready completions for commands, subcommands and flags, with setup instructions. Completion must work offline without logging in, prompting, reading secrets or sending telemetry. Consider environment-name completion from local config separately; never complete secret values.
 - [ ] Shell integration: a `direnv`-style hook that loads variables when you `cd` into a project.
 - [ ] Editor and runtime integrations (VS Code extension, Vite/Node loaders).
 - [ ] Turn `apps/website` into the docs and marketing site.

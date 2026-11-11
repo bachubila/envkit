@@ -63,8 +63,10 @@ export type NewVaultItem = Omit<VaultItem, "id" | "revisionDate">;
 export interface LoginOptions {
   email: string;
   password: string;
-  /** Allow prompting on the terminal for anything else (2FA codes; `bw` backend only). */
+  /** Allow prompting on the terminal for login verification. */
   interactive: boolean;
+  /** Native login only; verification codes must never be persisted or logged. */
+  askCode?: (kind: "authenticator" | "email" | "new-device") => Promise<string>;
 }
 
 export interface ApiKeyLoginOptions {

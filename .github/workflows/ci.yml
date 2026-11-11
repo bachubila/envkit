@@ -31,6 +31,18 @@ jobs:
           node packages/cli/dist/bin.mjs --version
           node packages/cli/dist/bin.mjs --help
 
+  windows-run:
+    name: Windows command launching
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: voidzero-dev/setup-vp@v1.21.2
+        with:
+          node-version: "24"
+          cache: true
+      - run: vp test tests/windows-run.test.ts
+        working-directory: packages/cli
+
   integration:
     name: integration (native backend, Vaultwarden in Docker)
     runs-on: ubuntu-latest
