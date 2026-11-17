@@ -27,7 +27,7 @@ async function project(options: { interactive?: boolean; env?: Record<string, st
 
 /** The same project on a fresh CI runner: `bw` has never logged in. */
 async function freshRunner(env: Record<string, string> = {}) {
-  const h = await project({ env });
+  const h = await project({ env: { ENVKIT_SERVER: SERVER, ...env } });
   await h.vault.logout();
   h.vault.serverUrl = undefined;
   await h.sessions.clear();
@@ -36,7 +36,7 @@ async function freshRunner(env: Record<string, string> = {}) {
 }
 
 describe("logging in without a terminal", () => {
-  test("uses BW_CLIENTID/BW_CLIENTSECRET and the project's server", async () => {
+  test("uses BW_CLIENTID/BW_CLIENTSECRET and the explicit server", async () => {
     const { envkit, vault } = await freshRunner({
       BW_CLIENTID: ALICE.clientId!,
       BW_CLIENTSECRET: ALICE.clientSecret!,
@@ -63,6 +63,21 @@ describe("logging in without a terminal", () => {
     });
     await envkit("get", "API_KEY");
     expect(vault.calls).toContain("setServer https://other.example.test");
+  });
+
+  test.each<Record<string, string>>([
+    { BW_CLIENTID: ALICE.clientId!, BW_CLIENTSECRET: ALICE.clientSecret! },
+    { ENVKIT_EMAIL: ALICE.email },
+  ])("refuses config-only automatic login with %o", async (credentials) => {
+    for (const server of [undefined, "", "   "]) {
+      const h = await freshRunner(credentials);
+      if (server === undefined) delete h.env.ENVKIT_SERVER;
+      else h.env.ENVKIT_SERVER = server;
+      const result = await h.envkit("get", "API_KEY");
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("ENVKIT_SERVER is required for automatic login");
+      expect(h.vault.calls.every((call) => call === "status")).toBe(true);
+    }
   });
 
   test("explains the env vars when there are no credentials", async () => {

@@ -8,6 +8,7 @@ export interface HttpRequest {
   json?: unknown;
   form?: Record<string, string>;
   headers?: Record<string, string>;
+  timeoutMs?: number;
 }
 
 /** A non-2xx response. `message` is the server's own wording when it sent one. */
@@ -44,7 +45,7 @@ export function send<T>(req: HttpRequest, ca?: string[]): Promise<T> {
   return new Promise((resolve, reject) => {
     const outgoing = request(
       url,
-      { method: req.method, headers, ca, timeout: TIMEOUT_MS },
+      { method: req.method, headers, ca, timeout: req.timeoutMs ?? TIMEOUT_MS },
       (res) => {
         let text = "";
         res.setEncoding("utf8").on("data", (chunk: string) => (text += chunk));

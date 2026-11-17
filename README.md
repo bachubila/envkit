@@ -24,7 +24,7 @@ To build it from source, clone this repo, run `vp install && vp run -r build`, a
 
 The Bitwarden CLI is **not** required. envkit talks to the server itself. To use `bw` instead, install `@bitwarden/cli` and set `ENVKIT_BACKEND=bw`.
 
-Interactive native login supports authenticator codes, email two-step codes, and new-device email verification. Authenticator login is tested against Vaultwarden; the email flows still need real-server verification. CI and accounts using browser-only methods should use `envkit login --apikey` with `BW_CLIENTID` and `BW_CLIENTSECRET` (see [CI setup](docs/ci.md)).
+Interactive native login supports authenticator codes, email two-step codes, and new-device email verification. Authenticator and email two-step login are tested against Vaultwarden; new-device email verification still needs Bitwarden cloud validation. CI and accounts using browser-only methods should use `envkit login --apikey` with `BW_CLIENTID` and `BW_CLIENTSECRET` (see [CI setup](docs/ci.md)).
 
 ## Quickstart
 
@@ -65,6 +65,7 @@ The vault stays unlocked for 60 idle minutes, using your OS keychain.
 | `envkit push [--from file] [--prune]`          | Upload a .env file, showing the changes first                 |
 | `envkit diff dev prod`                         | Compare the variable names of two environments                |
 | `envkit env list / add / remove`               | Manage environments                                           |
+| `envkit doctor [--json] [--offline]`           | Diagnose vault, login, config and .env Git coverage           |
 | `envkit sync`                                  | Fetch teammates' changes now (otherwise every 5 minutes)      |
 | `envkit status` / `lock` / `unlock` / `logout` | Session management                                            |
 
@@ -74,7 +75,7 @@ Run `envkit <command> --help` for every option.
 
 | Variable                         | Purpose                                                                                        |
 | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `ENVKIT_SERVER`, `ENVKIT_EMAIL`  | Defaults for `login`                                                                           |
+| `ENVKIT_SERVER`, `ENVKIT_EMAIL`  | Defaults for `login`; `ENVKIT_SERVER` is required for automatic login                          |
 | `ENVKIT_PASSWORD`                | Master password, for unlocking without a prompt (CI); never passed to the commands envkit runs |
 | `BW_CLIENTID`, `BW_CLIENTSECRET` | Personal API key, for `login --apikey` and CI                                                  |
 | `ENVKIT_SESSION`                 | A session key to use instead of the keychain                                                   |
