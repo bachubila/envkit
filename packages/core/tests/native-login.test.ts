@@ -49,7 +49,12 @@ beforeEach(async () => {
     if (request.url.endsWith("/prelogin")) return { kdf: 0, kdfIterations: kdf.iterations };
     if (request.url.endsWith("/connect/token")) {
       const challenge = challenges.shift();
-      if (challenge) throw new HttpError(400, "verification required", challenge);
+      if (challenge)
+        throw new HttpError(
+          400,
+          typeof challenge.message === "string" ? challenge.message : "verification required",
+          challenge,
+        );
       return token;
     }
     if (request.url.includes("/sync")) return {};
@@ -142,6 +147,28 @@ describe("native password login verification", () => {
     expect(askCode).toHaveBeenCalledTimes(3);
     expect(sent.filter((r) => r.url.endsWith("/send-email-login"))).toHaveLength(1);
     expect((await backend.status()).state).toBe("unauthenticated");
+  });
+
+  test("retries a rejected email token without a repeated provider list or another email", async () => {
+    challenges.push(
+      { TwoFactorProviders2: { "1": {} } },
+      { message: "Token is invalid! IP: 127.0.0.1" },
+    );
+    const askCode = vi.fn().mockResolvedValueOnce("000000").mockResolvedValueOnce("234567");
+    await backend.login({ ...options, askCode });
+    expect(askCode).toHaveBeenCalledTimes(2);
+    expect(tokenRequests().at(-1)!.form).toMatchObject({
+      twoFactorToken: "234567",
+      twoFactorProvider: "1",
+    });
+    expect(sent.filter((r) => r.url.endsWith("/send-email-login"))).toHaveLength(1);
+  });
+
+  test("unrelated errors after a challenge still fail immediately", async () => {
+    challenges.push({ TwoFactorProviders2: { "1": {} } }, { message: "Account disabled" });
+    const askCode = vi.fn(async () => "234567");
+    await expect(backend.login({ ...options, askCode })).rejects.toThrow("Account disabled");
+    expect(askCode).toHaveBeenCalledTimes(1);
   });
 
   test("empty codes and cancelled prompts never trigger another token request", async () => {

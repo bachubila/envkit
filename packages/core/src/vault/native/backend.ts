@@ -1,7 +1,7 @@
+import { CLIENT_HEADERS, DEVICE_TYPE } from "./protocol.ts";
+import { extraCa } from "../../tls.ts";
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { rootCertificates } from "node:tls";
 import { EnvkitError } from "../../errors.ts";
 import type { Env } from "../../paths.ts";
 import type {
@@ -430,6 +430,7 @@ export class NativeBackend implements VaultBackend {
     login?: LoginOptions,
   ): Promise<TokenResponse> {
     const emailSent = new Set<string>();
+    let previousKind: ReturnType<typeof verificationKind>;
     for (let attempt = 0; ; attempt++) {
       try {
         return await this.#send<TokenResponse>(tokenRequest(state, grant, headers));
@@ -437,7 +438,13 @@ export class NativeBackend implements VaultBackend {
         if (!(error instanceof HttpError) || error.status !== 400 || !error.body) {
           throw toVaultError(error);
         }
-        const kind = verificationKind(error.body);
+        const kind =
+          verificationKind(error.body) ??
+          (previousKind &&
+          !hasTwoFactor(error.body) &&
+          /^(Token is invalid|Two-step token is invalid)(?:[!. ]|$)/i.test(error.message)
+            ? previousKind
+            : undefined);
         if (!kind) {
           if (hasTwoFactor(error.body)) {
             throw verificationError(
@@ -470,6 +477,7 @@ export class NativeBackend implements VaultBackend {
           }
           emailSent.add(kind);
         }
+        previousKind = kind;
         const code = (await login.askCode(kind)).trim();
         if (!code) throw verificationError("No login verification code supplied");
         if (kind === "new-device") grant.newDeviceOtp = code;
@@ -711,35 +719,6 @@ function toVaultError(error: unknown): unknown {
 function pick({ id, organizationId, name }: RawCollection): Collection {
   return { id, organizationId, name };
 }
-
-/**
- * Trust NODE_EXTRA_CA_CERTS from `env` even when it isn't this process's
- * environment (Node reads it only at startup). Undefined keeps Node's defaults.
- */
-function extraCa(env: Env): string[] | undefined {
-  const path = env.NODE_EXTRA_CA_CERTS;
-  if (!path || path === process.env.NODE_EXTRA_CA_CERTS) return undefined;
-  try {
-    return [...rootCertificates, readFileSync(path, "utf8")];
-  } catch {
-    return undefined;
-  }
-}
-
-// Bitwarden's DeviceType: WindowsCLI, MacOsCLI, LinuxCLI.
-const DEVICE_TYPE =
-  process.platform === "win32" ? "23" : process.platform === "darwin" ? "24" : "25";
-
-/**
- * Bitwarden's own servers reject requests without these ("No client version header
- * found"); Vaultwarden ignores them. envkit identifies as the CLI it speaks the
- * protocol of, at a version recent enough for the server's feature checks.
- */
-const CLIENT_HEADERS: Record<string, string> = {
-  "Bitwarden-Client-Name": "cli",
-  "Bitwarden-Client-Version": "2026.10.0",
-  "Device-Type": DEVICE_TYPE,
-};
 
 const SECURE_NOTE = 2;
 

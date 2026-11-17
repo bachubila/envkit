@@ -85,6 +85,25 @@ export class VaultwardenApi {
     return () => totp(key, Date.now() + 30_000);
   }
 
+  /** Enables email two-step login using the actual code delivered over SMTP. */
+  async enableEmail(account: TestAccount, readCode: () => Promise<string>): Promise<void> {
+    const { userVerificationToken } = await this.#api<{ userVerificationToken: string }>(
+      account,
+      "POST",
+      "/api/two-factor/get-email",
+      { masterPasswordHash: account.masterPasswordHash },
+    );
+    await this.#api(account, "POST", "/api/two-factor/send-email", {
+      email: account.email,
+      userVerificationToken,
+    });
+    await this.#api(account, "PUT", "/api/two-factor/email", {
+      email: account.email,
+      token: await readCode(),
+      userVerificationToken,
+    });
+  }
+
   /** Creates a free organization owned by `owner`, with no collections. */
   async createOrganization(owner: TestAccount, name: string): Promise<TestOrganization> {
     const key = randomBytes(64);

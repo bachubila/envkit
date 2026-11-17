@@ -20,7 +20,9 @@ export interface Vaultwarden {
  * Starts a throwaway Vaultwarden in Docker with TLS (`bw` refuses plain http,
  * even on localhost). Requires `docker` and `openssl` on PATH.
  */
-export async function startVaultwarden(): Promise<Vaultwarden> {
+export async function startVaultwarden(
+  options: { network?: string; smtpHost?: string } = {},
+): Promise<Vaultwarden> {
   const dir = await mkdtemp(join(tmpdir(), "envkit-vaultwarden-"));
   const certPath = join(dir, "cert.pem");
   const keyPath = join(dir, "key.pem");
@@ -61,6 +63,23 @@ export async function startVaultwarden(): Promise<Vaultwarden> {
     `${dir}:/tls:ro`,
     "--publish",
     "127.0.0.1::80",
+    ...(options.network ? ["--network", options.network] : []),
+    ...(options.smtpHost
+      ? [
+          "--env",
+          `SMTP_HOST=${options.smtpHost}`,
+          "--env",
+          "SMTP_PORT=1025",
+          "--env",
+          "SMTP_SECURITY=off",
+          "--env",
+          "SMTP_FROM=envkit@example.test",
+          "--env",
+          "SIGNUPS_VERIFY=false",
+          "--env",
+          "SHOW_PASSWORD_HINT=false",
+        ]
+      : []),
     VAULTWARDEN_IMAGE,
   ]);
   const containerId = id.trim();
