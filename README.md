@@ -74,7 +74,7 @@ Run `envkit <command> --help` for every option.
 
 | Variable                         | Purpose                                                                                        |
 | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `ENVKIT_SERVER`, `ENVKIT_EMAIL`  | Defaults for `login`                                                                           |
+| `ENVKIT_SERVER`, `ENVKIT_EMAIL`  | Defaults for `login`; `ENVKIT_SERVER` is required for automatic login                          |
 | `ENVKIT_PASSWORD`                | Master password, for unlocking without a prompt (CI); never passed to the commands envkit runs |
 | `BW_CLIENTID`, `BW_CLIENTSECRET` | Personal API key, for `login --apikey` and CI                                                  |
 | `ENVKIT_SESSION`                 | A session key to use instead of the keychain                                                   |

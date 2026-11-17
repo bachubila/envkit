@@ -62,10 +62,9 @@ export async function openProject(
   const { config } = await loadConfig(context.cwd);
   const backend = context.backend();
   const sessions = await context.sessions();
-  const login = { server: config.server };
   const cached = await cachedSession(context);
   let optimistic = cached !== undefined;
-  let current: Session = cached ?? (await requireSession(context, login));
+  let current: Session = cached ?? (await requireSession(context));
   warnOnServerMismatch(context, config, current.status);
 
   async function withSession<T>(work: (session: string) => Promise<T>): Promise<T> {
@@ -75,7 +74,7 @@ export async function openProject(
       if (!optimistic || !isSessionRejected(error)) throw error;
       optimistic = false;
       await sessions.clear();
-      current = await requireSession(context, login);
+      current = await requireSession(context);
       return work(current.session);
     }
   }

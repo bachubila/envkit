@@ -35,7 +35,7 @@ describe("CI: a fresh runner with only env vars", () => {
     });
     const { clientId, clientSecret } = await server.api.apiKey(ci);
 
-    // The checked-out repo: only .envkit.json, which says which server to use.
+    // The checked-out repo supplies item IDs; CI explicitly supplies the trusted server.
     const cwd = await server.tempHome();
     await copyFile(join(alice.cwd, CONFIG_FILE), join(cwd, CONFIG_FILE));
     runner = {
@@ -46,6 +46,7 @@ describe("CI: a fresh runner with only env vars", () => {
         ...BACKEND_ENV,
         // Runners have no keychain; keep this machine's out of it.
         ENVKIT_SESSION_STORE: "memory",
+        ENVKIT_SERVER: server.vaultwarden.url,
         CI: "true",
         GITHUB_ACTIONS: "true",
         BW_CLIENTID: clientId,
@@ -61,6 +62,13 @@ describe("CI: a fresh runner with only env vars", () => {
       env: { ...runner.env, ...env },
       encoding: "utf8",
     });
+
+  test("a fresh runner refuses automatic login without an explicit server", () => {
+    const result = envkit(["get", "API_KEY"], { ENVKIT_SERVER: undefined });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("ENVKIT_SERVER is required for automatic login");
+    expect(result.stdout).toBe("");
+  });
 
   test("envkit run logs in, unlocks, masks the values and runs the command", () => {
     const result = envkit([

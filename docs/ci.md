@@ -9,11 +9,13 @@ envkit runs without prompts in pipelines. When `CI` is set, or you pass `--non-i
 3. **Create an API key for it.** In the web vault, log in as the CI account and open _Account settings → Security → Keys → View API key_. That gives you `client_id` (`user.…`) and `client_secret`.
 4. **Store three secrets in your CI**: `BW_CLIENTID`, `BW_CLIENTSECRET` and `ENVKIT_PASSWORD` (the CI account's master password). The master password is what decrypts the vault; the API key only logs in.
 
+Set `ENVKIT_SERVER` in your CI configuration to your vault URL. Automatic login requires this explicit setting: the committed `.envkit.json` cannot choose where credentials are sent.
+
 On the first envkit command, envkit:
 
 - logs in with the API key,
 - unlocks the vault with `ENVKIT_PASSWORD`,
-- takes the server URL from the committed `.envkit.json`, or from `ENVKIT_SERVER` if you set it.
+- takes the server URL from `ENVKIT_SERVER`.
 
 envkit never passes `ENVKIT_PASSWORD` or `ENVKIT_SESSION` to the commands it runs.
 
@@ -30,6 +32,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
+      ENVKIT_SERVER: ${{ vars.ENVKIT_SERVER }}
       BW_CLIENTID: ${{ secrets.BW_CLIENTID }}
       BW_CLIENTSECRET: ${{ secrets.BW_CLIENTSECRET }}
       ENVKIT_PASSWORD: ${{ secrets.ENVKIT_PASSWORD }}
@@ -39,7 +42,7 @@ jobs:
         with:
           node-version: "24"
           cache: true
-      - run: npm install --global envkit
+      - run: npm install --global @envkit/cli
       - run: envkit run --env ci -- vp test
 ```
 
@@ -54,7 +57,7 @@ Two limits on masking:
 
 ## Other CI systems
 
-The setup is the same anywhere: install Node.js 24.7 or newer (Node 24 LTS) and envkit, set the three secrets as env vars, and set `CI=true` if your CI doesn't. Only the masking is GitHub-specific, so check that your CI hides secret values in its logs.
+The setup is the same anywhere: install Node.js 24.7 or newer (Node 24 LTS) and envkit, set the three secrets and `ENVKIT_SERVER` as env vars, and set `CI=true` if your CI doesn't. Only the masking is GitHub-specific, so check that your CI hides secret values in its logs.
 
 ## The Bitwarden CLI backend
 
@@ -62,9 +65,9 @@ envkit talks to the vault itself and doesn't need the Bitwarden CLI. If you set 
 
 ## Troubleshooting
 
-| Error                                | Fix                                                                                                                                       |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `Not logged in`                      | Set `BW_CLIENTID` and `BW_CLIENTSECRET` (or `ENVKIT_EMAIL`), and commit `.envkit.json` or set `ENVKIT_SERVER` so envkit knows the server. |
-| `Vault is locked`                    | Set `ENVKIT_PASSWORD`.                                                                                                                    |
-| Self-signed certificate              | Set `NODE_EXTRA_CA_CERTS` to the CA certificate's path.                                                                                   |
-| `You can only read this environment` | This is expected for a read-only CI account. Writes belong on a developer machine.                                                        |
+| Error                                | Fix                                                                                                            |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `Not logged in`                      | Set `BW_CLIENTID` and `BW_CLIENTSECRET` (or `ENVKIT_EMAIL`), and set `ENVKIT_SERVER` to the trusted vault URL. |
+| `Vault is locked`                    | Set `ENVKIT_PASSWORD`.                                                                                         |
+| Self-signed certificate              | Set `NODE_EXTRA_CA_CERTS` to the CA certificate's path.                                                        |
+| `You can only read this environment` | This is expected for a read-only CI account. Writes belong on a developer machine.                             |

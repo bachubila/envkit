@@ -8,34 +8,23 @@ export interface Session {
   status: VaultStatus;
 }
 
-export interface LoginOptions {
-  /** Server to log in to automatically when ENVKIT_SERVER isn't set, e.g. the project's. */
-  server?: string;
-}
-
 /**
  * Logged-in status, or a "run `envkit login`" error. Without a terminal it
  * logs in from BW_CLIENTID/BW_CLIENTSECRET or ENVKIT_EMAIL/ENVKIT_PASSWORD.
  */
-export async function requireLogin(
-  context: CliContext,
-  options: LoginOptions = {},
-): Promise<VaultStatus> {
-  return (await loginState(context, options)).status;
+export async function requireLogin(context: CliContext): Promise<VaultStatus> {
+  return (await loginState(context, {})).status;
 }
 
 /**
  * A session key that is valid right now: ENVKIT_SESSION, then the cached
  * session, then unlocking with the master password. Costs one `status` call.
  */
-export async function requireSession(
-  context: CliContext,
-  options: LoginOptions = {},
-): Promise<Session> {
+export async function requireSession(context: CliContext): Promise<Session> {
   const fromEnv = context.env.ENVKIT_SESSION;
   const sessions = await context.sessions();
   const cached = fromEnv ? undefined : await sessions.peek();
-  const state = await loginState(context, { ...options, session: fromEnv ?? cached?.key });
+  const state = await loginState(context, { session: fromEnv ?? cached?.key });
   if (state.session) return { session: state.session, status: state.status };
 
   const { status } = state;
@@ -82,12 +71,12 @@ export function isSessionRejected(error: unknown): boolean {
 
 async function loginState(
   context: CliContext,
-  options: LoginOptions & { session?: string | undefined },
+  options: { session?: string | undefined },
 ): Promise<{ status: VaultStatus; session?: string }> {
   const backend = context.backend();
   const status = await backend.status(options.session);
   if (status.state !== "unauthenticated") return { status };
-  const loggedIn = await loginFromEnv(context, options.server);
+  const loggedIn = await loginFromEnv(context);
   if (loggedIn) return loggedIn;
   throw new EnvkitError("Not logged in", {
     hint: context.interactive
@@ -102,14 +91,18 @@ async function loginState(
  */
 async function loginFromEnv(
   context: CliContext,
-  projectServer: string | undefined,
 ): Promise<{ status: VaultStatus; session?: string } | undefined> {
   const { env } = context;
   if (context.interactive) return undefined;
-  const requested = env.ENVKIT_SERVER ?? projectServer;
+  const requested = env.ENVKIT_SERVER;
   const apiKey = env.BW_CLIENTID && env.BW_CLIENTSECRET;
   const password = env.ENVKIT_EMAIL && env.ENVKIT_PASSWORD !== undefined;
-  if (!requested || !(apiKey || password)) return undefined;
+  if (!(apiKey || password)) return undefined;
+  if (!requested?.trim()) {
+    throw new EnvkitError("ENVKIT_SERVER is required for automatic login", {
+      hint: "Set ENVKIT_SERVER in your CI configuration. The server in .envkit.json is not trusted for sending credentials.",
+    });
+  }
 
   const backend = context.backend();
   const serverUrl = normalizeServerUrl(requested);
