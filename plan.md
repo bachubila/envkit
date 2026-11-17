@@ -266,7 +266,7 @@ What we learned (and what later phases need to know):
   - [x] SMTP integration coverage for email two-step login with a pinned Mailpit container and an isolated Vaultwarden. Covers non-interactive refusal, a wrong code followed by the delivered code, and no persisted codes. Fixed retries when Vaultwarden omits provider metadata after a rejected code; only recognized invalid-token errors reuse the previous challenge.
   - [ ] Manually verify new-device email verification against bitwarden.eu. The pinned Vaultwarden supports email two-step login but does not implement Bitwarden's `newDeviceOtp` challenge; unit tests cover its protocol and prompting.
   - **Done when:** an account with an authenticator app, and a fresh device on an account without two-step login, can both `envkit login` with the native backend, with real-server validation of the remaining email paths.
-- [ ] `envkit doctor`: checks the backend (and the `bw` version with `ENVKIT_BACKEND=bw`), server reachability, login state, config validity and `.gitignore` coverage.
+- [x] `envkit doctor`: checks the backend (and the `bw` version with `ENVKIT_BACKEND=bw`), HTTPS server reachability, login/session state, config validity, server mismatches and root `.env` Git coverage. Supports `--json` and `--offline`; failures exit 1, warnings exit 0. Never auto-logs in, unlocks, syncs or reads environment secrets.
 - [x] Integration tests against Vaultwarden in docker (`vaultwarden/server`), run in CI. Done in Phase 1 (`tools/testkit`). Extend them as each phase adds commands.
 - [ ] Manual check of interactive prompts, 2FA and the macOS/Windows keychains (see Phase 1 notes).
 - [ ] Publish to npm (`npx envkit`, `pnpm dlx envkit`); see **Release 0.1.0** below. Consider single-file binaries later.

@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import pkg from "../package.json" with { type: "json" };
+import { doctor } from "./commands/doctor.ts";
 import { diff } from "./commands/diff.ts";
 import { env } from "./commands/env.ts";
 import { get } from "./commands/get.ts";
@@ -48,5 +49,6 @@ export const main = defineCommand({
     unlock,
     lock,
     status,
+    doctor,
   },
 });

@@ -70,6 +70,21 @@ describe("CI: a fresh runner with only env vars", () => {
     expect(result.stdout).toBe("");
   });
 
+  test("doctor probes the real server without automatically logging in or printing credentials", () => {
+    const result = envkit(["doctor", "--json"]);
+    expect(result.status).toBe(1);
+    const report = JSON.parse(result.stdout);
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "server", state: "pass" }),
+        expect.objectContaining({ name: "login", state: "fail" }),
+      ]),
+    );
+    expect(result.stderr).not.toContain("Logged in");
+    expect(result.stdout).not.toContain(runner.env.BW_CLIENTSECRET);
+    expect(result.stdout).not.toContain(runner.env.ENVKIT_PASSWORD);
+  });
+
   test("envkit run logs in, unlocks, masks the values and runs the command", () => {
     const result = envkit([
       "run",
@@ -90,6 +105,20 @@ describe("CI: a fresh runner with only env vars", () => {
     expect(result.stdout).toBe("sk-ci-123456\n");
     expect(result.stderr).not.toContain("Logged in");
     expect(result.status).toBe(0);
+  });
+
+  test("doctor checks a logged-in runner without unlocking or reading its variables", () => {
+    const result = envkit(["doctor", "--json"]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout).checks).toContainEqual(
+      expect.objectContaining({
+        name: "login",
+        state: "warn",
+        message: "Vault is locked.",
+      }),
+    );
+    expect(result.stdout).not.toContain("sk-ci-123456");
+    expect(result.stderr).toBe("");
   });
 
   test("without ENVKIT_PASSWORD it fails fast instead of prompting", () => {

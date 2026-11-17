@@ -1,3 +1,4 @@
+export { checkServer } from "./server-health.ts";
 export {
   CONFIG_FILE,
   findConfig,

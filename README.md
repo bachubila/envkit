@@ -65,6 +65,7 @@ The vault stays unlocked for 60 idle minutes, using your OS keychain.
 | `envkit push [--from file] [--prune]`          | Upload a .env file, showing the changes first                 |
 | `envkit diff dev prod`                         | Compare the variable names of two environments                |
 | `envkit env list / add / remove`               | Manage environments                                           |
+| `envkit doctor [--json] [--offline]`           | Diagnose vault, login, config and .env Git coverage           |
 | `envkit sync`                                  | Fetch teammates' changes now (otherwise every 5 minutes)      |
 | `envkit status` / `lock` / `unlock` / `logout` | Session management                                            |
 

@@ -31,6 +31,10 @@
         {
           "text": "CI setup",
           "link": "/ci"
+        },
+        {
+          "text": "Troubleshooting",
+          "link": "/troubleshooting"
         }
       ]
     }
